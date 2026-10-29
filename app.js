@@ -354,13 +354,17 @@ function exportCsv(){
 }
 
 /* ---------- one-time import from a link (keeps figures out of the public code) ---------- */
-// Link format: #import-<base64url of {"v":1,"branches":[{id,name,color,order}],"months":[[branchId,"YYYY-MM",total]]}>
+// Link format: #import-<base64url of {"v":1,"branches":[{id,name,color,order}],"months":[[branchId,"YYYY-MM",total]],"entries":[[branchId,"YYYY-MM-DD",amount]]}>
+// months and entries are both optional
 function decodeImport(s){
   try{
     const bin=atob(s.replace(/-/g,'+').replace(/_/g,'/')),d=JSON.parse(new TextDecoder().decode(Uint8Array.from(bin,c=>c.charCodeAt(0))));
     const okB=b=>/^[a-z0-9]{1,24}$/.test(b?.id)&&typeof b.name==='string'&&b.name.length<=60&&/^#[0-9a-f]{6}$/i.test(b.color||'#000000');
     const okM=m=>Array.isArray(m)&&/^[a-z0-9]{1,24}$/.test(m[0])&&/^\d{4}-\d{2}$/.test(m[1])&&typeof m[2]==='number'&&m[2]>=0;
-    if(d?.v!==1||!Array.isArray(d.branches)||!Array.isArray(d.months)||d.branches.length>20||d.months.length>500||!d.branches.every(okB)||!d.months.every(okM)) return null;
+    const okE=e=>Array.isArray(e)&&/^[a-z0-9]{1,24}$/.test(e[0])&&/^\d{4}-\d{2}-\d{2}$/.test(e[1])&&typeof e[2]==='number'&&e[2]>=0;
+    d.branches??=[];d.months??=[];d.entries??=[];
+    if(d?.v!==1||![d.branches,d.months,d.entries].every(Array.isArray)||d.branches.length>20||d.months.length>500||d.entries.length>3000||
+      !d.branches.every(okB)||!d.months.every(okM)||!d.entries.every(okE)) return null;
     return d;
   }catch(e){return null}
 }
@@ -370,27 +374,34 @@ function showImport(s){
   importData=decodeImport(s);route();
   if(!importData){toast('رابط الاستيراد غير صالح.',true);return}
   if(!db){toast('سجّل دخولك أول وبعدها افتح الرابط مرة ثانية.',true);return}
-  const names=Object.fromEntries(importData.branches.map(b=>[b.id,b.name]));
+  const names=Object.fromEntries([...S.branches,...importData.branches].map(b=>[b.id,b.name]));
+  const groups={};
+  for(const [bid,date,v] of importData.entries){const g=groups[bid+'|'+date.slice(0,7)]??={bid,month:date.slice(0,7),days:0,sum:0};g.days++;g.sum+=v}
+  const daily=Object.values(groups).map(g=>`<div class="row"><span class="row-main"><span class="row-title">${esc(names[g.bid]||g.bid)}</span><span class="row-sub">${AR_MONTHS[+g.month.slice(5)-1]} ${g.month.slice(0,4)} · ${g.days} يوم</span></span><span class="row-val">${fmt(g.sum)}</span></div>`).join('');
   const list=importData.months.map(m=>`<div class="row"><span class="row-main"><span class="row-title">${esc(names[m[0]]||m[0])}</span><span class="row-sub">${AR_MONTHS[+m[1].slice(5)-1]} ${m[1].slice(0,4)}</span></span><span class="row-val">${fmt(m[2])}</span></div>`).join('');
   $('importSheet').innerHTML=`<div class="grabber"></div>
     <div class="sheet-head"><button class="nav-btn" type="button" data-close-sheet>إلغاء</button><h2>استيراد البيانات</h2><span></span></div>
     <div class="sheet-body">
-      <p class="sub" style="text-align:center">بينضاف ${importData.branches.length} فروع، ومجموع ${importData.months.length} أشهر من الأوراق.</p>
-      <div class="list">${list}</div>
+      ${importData.branches.length?`<p class="sub" style="text-align:center">فروع جديدة: ${importData.branches.map(b=>esc(b.name)).join('، ')}</p>`:''}
+      ${daily?`<section class="section"><div class="sec-head"><span>الدخل اليومي</span></div><div class="list">${daily}</div></section>`:''}
+      ${list?`<section class="section"><div class="sec-head"><span>مجاميع أشهر من الأوراق</span></div><div class="list">${list}</div></section>`:''}
       <button class="btn" id="importGo">استيراد</button>
     </div>`;
   openSheet('importSheet');
   $('importGo').onclick=async()=>{
     const btn=$('importGo');btn.disabled=true;btn.textContent='جاري الاستيراد…';
     try{
-      const batch=fs.writeBatch(db);
+      const ops=[],at=new Date().toISOString();
       for(const b of importData.branches){
         const ref=fs.doc(db,base(),'branches',b.id);
-        if(!(await fs.getDoc(ref)).exists()) batch.set(ref,{name:b.name,color:b.color||COLORS[0],order:b.order??Date.now(),createdAt:new Date().toISOString()});
+        if(!(await fs.getDoc(ref)).exists()) ops.push([ref,{name:b.name,color:b.color||COLORS[0],order:b.order??Date.now(),createdAt:at}]);
       }
       for(const [bid,month,total] of importData.months)
-        batch.set(fs.doc(db,base(),'months',`${bid}_${month}`),{branchId:bid,month,year:+month.slice(0,4),total,source:'paper'});
-      await batch.commit();
+        ops.push([fs.doc(db,base(),'months',`${bid}_${month}`),{branchId:bid,month,year:+month.slice(0,4),total,source:'paper'}]);
+      for(const [bid,date,amount] of importData.entries)
+        ops.push([fs.doc(db,base(),'entries',`${bid}_${date}`),{branchId:bid,date,year:+date.slice(0,4),month:date.slice(0,7),amount,updatedAt:at}]);
+      for(let i=0;i<ops.length;i+=400){const b=fs.writeBatch(db);ops.slice(i,i+400).forEach(([r,d])=>b.set(r,d));await b.commit()}
+      yearCache.clear();
       closeSheets();toast('تم الاستيراد ✓');importData=null;
     }catch(err){btn.disabled=false;btn.textContent='استيراد';toast(errMsg(err),true)}
   };
