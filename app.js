@@ -691,6 +691,8 @@ function showImport(s){
 
 /* ---------- assistant UI ---------- */
 let lastFrom=null;
+// Every assistant failure shows the same message to Ahmed; the technical reason stays folded underneath for the engineer
+const aiFail=detail=>`صار خلل في المساعد، راجع المهندسة شذى طال عمرك 🙏<details class="ai-det"><summary>تفاصيل للمهندسة</summary><div class="ai-err">${esc(String(detail||'').trim().slice(0,480))}</div></details>`;
 function aiMsg(role,html){
   const el=document.createElement('div');el.className=`bub ${role}${lastFrom&&lastFrom!==role?' gap':''}`;el.innerHTML=html;
   $('aiMsgs').appendChild(el);lastFrom=role;return el;
@@ -702,11 +704,11 @@ async function aiAsk(text){
   const wait=document.createElement('div');wait.className='typing';wait.setAttribute('aria-label','المساعد يكتب…');wait.innerHTML='<i></i><i></i><i></i>';$('aiMsgs').appendChild(wait);
   let html;
   try{
-    if(!aiModel){html='المساعد يشتغل بعد ما نربط الموقع بـ Firebase ونفعّل Gemini (AI Logic).';return}
+    if(!aiModel){html=aiFail('AI Logic model not initialised (Firebase config or getAI failed)');return}
     // Check App Check first so a broken key shows its reason instead of leaving the question hanging
     if(appCheck){
       const r=await Promise.race([getToken(appCheck,false).then(()=>null,e=>`${e?.code||''} ${e?.message||e}`),new Promise(ok=>setTimeout(()=>ok('timeout'),12000))]);
-      if(r){html=`الحماية (App Check) ما قدرت تتحقق من الموقع، فما قدرت أرسل سؤالك. غالباً مفتاح Fraud Defense في Firebase ما يطابق الموقع.<div class="ai-err">${esc(r==='timeout'?'App Check: no token after 12s':r.trim().slice(0,260))}</div>`;return}
+      if(r){html=aiFail(r==='timeout'?'App Check: no token after 12s':`App Check: ${r}`);return}
     }
     let answer;
     for(;;){
@@ -716,15 +718,10 @@ async function aiAsk(text){
     html=mdLite(answer||'ما قدرت أطلع جواب. جرّب تصيغ السؤال بطريقة ثانية.');
   }catch(e){
     const m=String(e?.message||e),code=e?.code||'';
-    const msg=code==='api-not-enabled'||/api-not-enabled|not been used|has not been enabled|AI Logic/i.test(m)?'لازم تفعّل <b>AI Logic</b> في Firebase عشان يشتغل المساعد.':
-      /quota|\b429\b|RESOURCE_EXHAUSTED/i.test(m)?'وصلنا للحد المجاني للمساعد حالياً. جرّب بعد شوي.':
-      code==='timeout'?'المساعد طوّل وما رد. جرّب مرة ثانية.':
-      /App Check/i.test(m)?'المساعد ينتظر تفعيل حماية App Check. انتظر دقايق وجرّب مرة ثانية.':
-      code==='fetch-error'&&!navigator.onLine?'ما فيه اتصال بالإنترنت.':'صار خطأ في الاتصال بالمساعد. جرّب مرة ثانية، وإذا تكرر صوّر الرسالة.';
     // When App Check rejects the request, ask App Check itself why it could not issue a valid token
     let why='';
     if(/App Check/i.test(m)&&appCheck){try{await getToken(appCheck,true);why='App Check token OK'}catch(x){why=`${x?.code||''} ${x?.message||x}`}}
-    html=`${msg}<div class="ai-err">${esc(`${code} ${m}`.trim().slice(0,220))}${why?`<br>${esc(why.trim().slice(0,260))}`:''}</div>`;
+    html=aiFail(`${navigator.onLine?'':'[offline] '}${code} ${m}${why?`\n${why}`:''}`);
     aiChat=null;
   }finally{wait.remove();if(html)aiMsg('bot',html);aiBusy=false;sendState()}
 }
