@@ -596,4 +596,4 @@ if(!firebaseConfig){
     btn.disabled=false;btn.textContent='دخول';
   });
 }
-if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).catch(()=>{});
