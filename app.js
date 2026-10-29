@@ -627,16 +627,23 @@ function aiSystem(){
 - إذا السؤال مو عن الدفتر، قل بلطف إنك مختص بأرقام الدفتر.`;
 }
 // Newest model first; if Google has retired one, the next is tried and remembered for the visit
-// Light thinking keeps replies quick: adding up figures needs no deep reasoning. 2.5 models take a budget instead of a level.
-const AI_MODELS=[{model:'gemini-flash-latest',thinkingConfig:{thinkingLevel:'LOW'}},{model:'gemini-3.6-flash',thinkingConfig:{thinkingLevel:'LOW'}},{model:'gemini-2.5-flash',thinkingConfig:{thinkingBudget:0}}];
+// Flash-Lite with thinking off answers fastest; the figures come from the tools, the model only reads the question and words the reply.
+// If Google retires a name or a model rejects a thinking setting, the next entry is tried.
+const AI_MODELS=[
+  {model:'gemini-flash-lite-latest',thinkingConfig:{thinkingLevel:'MINIMAL'}},
+  {model:'gemini-flash-lite-latest'},
+  {model:'gemini-2.5-flash-lite',thinkingConfig:{thinkingBudget:0}},
+  {model:'gemini-flash-latest',thinkingConfig:{thinkingLevel:'LOW'}},
+  {model:'gemini-2.5-flash',thinkingConfig:{thinkingBudget:0}},
+];
 let aiCtx=null,aiModelIdx=0,aiModel=null,aiChat=null,aiBusy=false;
 function initAI(app){try{aiCtx=getAI(app,{backend:new GoogleAIBackend()});makeModel()}catch(e){aiCtx=null}}
 function makeModel(){
   const {model,thinkingConfig}=AI_MODELS[aiModelIdx];
-  aiModel=aiCtx?getGenerativeModel(aiCtx,{model,systemInstruction:aiSystem(),tools:[{functionDeclarations:aiDecls()}],generationConfig:{thinkingConfig}}):null;
+  aiModel=aiCtx?getGenerativeModel(aiCtx,{model,systemInstruction:aiSystem(),tools:[{functionDeclarations:aiDecls()}],generationConfig:thinkingConfig?{thinkingConfig}:{}}):null;
   aiChat=null;
 }
-const modelGone=m=>/\b404\b|not found|is not supported|no longer available|deprecated|retired|thinking/i.test(m);
+const modelGone=m=>/\b404\b|not found|is not supported|no longer available|deprecated|retired|thinking|\b400\b|invalid argument/i.test(m);
 async function aiRun(text){
   aiChat??=aiModel.startChat();
   // The branch names travel with each question so the model can usually answer in one tool round
@@ -700,6 +707,35 @@ function aiMsg(role,html){
   const el=document.createElement('div');el.className=`bub ${role}${lastFrom&&lastFrom!==role?' gap':''}`;el.innerHTML=html;
   $('aiMsgs').appendChild(el);lastFrom=role;return el;
 }
+// The suggested questions are answered on the device straight from the ledger, with no wait for Gemini
+const sar=n=>`${fmt(n)} ${CUR}`;
+const qList=rows=>`<ul>${rows.map(([k,v])=>`<li>${esc(k)}: <b>${v}</b></li>`).join('')}</ul>`;
+async function quickAnswer(text){
+  const t=new Date(),y=t.getFullYear(),m=t.getMonth(),from=ds(y,m,1);
+  if(text===AI_SUGG[0]){
+    const r=await TOOLS.get_totals({from,to:todayStr});
+    return `مجموع ${AR_MONTHS[m]} لين اليوم:${qList(Object.entries(r.per_branch).map(([n,p])=>[n,sar(p.total)]))}كل الفروع: <b>${sar(r.total)}</b>`;
+  }
+  if(text===AI_SUGG[1]){
+    const r=await TOOLS.find_missing_days({from,to:todayStr});
+    if(!r.missing_days_count) return `ما فيه ولا يوم ناقص في ${AR_MONTHS[m]}، كل الفروع مسجّلة لين اليوم 👌`;
+    const per={};for(const d of r.days) for(const n of d.missing) (per[n]??=[]).push(+d.date.slice(8));
+    return `الأيام اللي ما تعبّت في ${AR_MONTHS[m]}:${qList(Object.entries(per).map(([n,ds])=>[n,(ds.length===1?'يوم ':'أيام ')+ds.join('، ')]))}`;
+  }
+  if(text===AI_SUGG[2]){
+    const d=new Date(t.getFullYear(),t.getMonth(),t.getDate());do d.setDate(d.getDate()-1);while(d.getDay()!==1);
+    const date=ds(d.getFullYear(),d.getMonth(),d.getDate()),r=await TOOLS.get_day({date});
+    const head=`الاثنين ${d.getDate()} ${AR_MONTHS[d.getMonth()]}`;
+    if(!Object.keys(r.amounts).length) return `${head} ما فيه دخل مسجّل لأي فرع.`;
+    return `${head} دخلنا <b>${sar(r.total)}</b>:${qList(Object.entries(r.amounts).map(([n,v])=>[n,sar(v)]))}${r.not_entered.length?`ما تسجّل: ${esc(r.not_entered.join('، '))}`:''}`;
+  }
+  if(text===AI_SUGG[3]){
+    const r=await TOOLS.get_totals({from:`${y}-01-01`,to:todayStr}),list=Object.entries(r.per_branch).sort((a,b)=>b[1].total-a[1].total);
+    if(!list.length||!r.total) return `ما فيه دخل مسجّل في ${y} للحين.`;
+    return `أعلى فرع في ${y} هو <b>${esc(list[0][0])}</b> بـ ${sar(list[0][1].total)}:${qList(list.map(([n,p])=>[n,sar(p.total)]))}`;
+  }
+  return null;
+}
 async function aiAsk(text){
   text=text.trim();if(!text||aiBusy) return;
   aiBusy=true;$('aiSend').disabled=true;sendState();
@@ -707,6 +743,8 @@ async function aiAsk(text){
   const wait=document.createElement('div');wait.className='typing';wait.setAttribute('aria-label','المساعد يكتب…');wait.innerHTML='<i></i><i></i><i></i>';$('aiMsgs').appendChild(wait);
   let html;
   try{
+    const quick=await quickAnswer(text);
+    if(quick){html=quick;return}
     if(!aiModel){html=aiFail('AI Logic model not initialised (Firebase config or getAI failed)');return}
     // Check App Check first so a broken key shows its reason instead of leaving the question hanging
     if(appCheck){
