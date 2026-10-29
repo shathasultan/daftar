@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>دفتر الفروع</title>
-<meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#000000">
+<meta name="color-scheme" content="dark">
 <meta name="robots" content="noindex,nofollow">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icons/icon-192.png">
@@ -13,53 +13,100 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="دفتر الفروع">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<main class="login" id="login" hidden>
-  <form class="login-box" id="loginForm">
-    <img class="app-icon" src="icons/icon-192.png" alt="">
-    <div><h1 class="large">أهلاً أحمد</h1><p class="sub">سجّل دخولك عشان تشوف فروعك</p></div>
-    <div class="list">
-      <div class="row field-row"><label for="email">الإيميل</label><input id="email" type="email" autocomplete="username" dir="ltr" required></div>
-      <div class="row field-row"><label for="password">كلمة السر</label><input id="password" type="password" autocomplete="current-password" dir="ltr" required></div>
+
+<div class="splash" id="splash" aria-hidden="true">
+  <div class="sp-box">
+    <div class="sp-glow"></div>
+    <div class="sp-icon">
+      <svg width="68" height="68" viewBox="0 0 52 52" fill="none">
+        <g class="sp-page">
+          <rect x="9" y="7" width="34" height="38" rx="6" fill="#FFFFFF" fill-opacity="0.96"/>
+          <rect x="9" y="7" width="7" height="38" rx="3" fill="#FFFFFF"/>
+          <path d="M16 7v38" stroke="#0A6CF0" stroke-opacity="0.25" stroke-width="1.5"/>
+        </g>
+        <rect class="sp-bar" x="21" y="30" width="5" height="9" rx="2" fill="#0A84FF"/>
+        <rect class="sp-bar sp-b2" x="28" y="23" width="5" height="16" rx="2" fill="#FF9F0A"/>
+        <rect class="sp-bar sp-b3" x="35" y="16" width="5" height="23" rx="2" fill="#30D158"/>
+        <path class="sp-spark" d="M41 2.5c.3 2.6 1.6 3.9 4.2 4.2-2.6.3-3.9 1.6-4.2 4.2-.3-2.6-1.6-3.9-4.2-4.2 2.6-.3 3.9-1.6 4.2-4.2z" fill="#FFFFFF"/>
+      </svg>
+      <div class="sp-shine"></div>
     </div>
-    <div class="login-err" id="loginErr" hidden></div>
-    <button class="btn" id="loginBtn" type="submit">دخول</button>
+  </div>
+  <div class="sp-words">
+    <div class="sp-word">دفتر الفروع</div>
+    <div class="sp-word sp-word2">دخل فروعك، مجموع كل يوم</div>
+  </div>
+  <div class="sp-dots"><span style="background:#0A84FF"></span><span style="background:#FF9F0A"></span><span style="background:#30D158"></span></div>
+</div>
+
+<main class="login" id="login" hidden>
+  <div class="top">
+    <div class="app-icon">
+      <svg width="52" height="52" viewBox="0 0 52 52" fill="none" aria-hidden="true">
+        <rect x="9" y="7" width="34" height="38" rx="6" fill="#FFFFFF" fill-opacity="0.96"/>
+        <rect x="9" y="7" width="7" height="38" rx="3" fill="#FFFFFF"/>
+        <path d="M16 7v38" stroke="#0A6CF0" stroke-opacity="0.25" stroke-width="1.5"/>
+        <rect x="21" y="30" width="5" height="9" rx="2" fill="#0A84FF"/>
+        <rect x="28" y="23" width="5" height="16" rx="2" fill="#FF9F0A"/>
+        <rect x="35" y="16" width="5" height="23" rx="2" fill="#30D158"/>
+      </svg>
+    </div>
+    <h1 class="title">أهلاً أحمد</h1>
+    <p>سجّل دخولك عشان تشوف فروعك</p>
+  </div>
+  <form id="loginForm">
+    <div class="list">
+      <label class="l-row"><span>الإيميل</span><input id="email" type="email" dir="ltr" placeholder="name@example.com" autocomplete="username" required></label>
+      <label class="l-row"><span>كلمة السر</span><input id="password" type="password" dir="ltr" placeholder="••••••••" autocomplete="current-password" required></label>
+    </div>
+    <div class="l-err" role="alert"><span id="loginErr" hidden style="display:contents"><span class="bang" aria-hidden="true">!</span><span id="loginErrText"></span></span></div>
+    <button class="l-btn" id="loginBtn" type="submit"><span id="loginBtnText">دخول</span>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="13.4" cy="8" r="1.5" fill="currentColor"/><path d="M10.2 8H2.8M6 4.6L2.6 8 6 11.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
   </form>
+  <p class="foot-note">دفتر الفروع · حساب شخصي لأحمد</p>
 </main>
 
 <div id="app" hidden>
   <header class="nav" id="nav">
-    <div class="nav-in">
+    <nav class="nav-in">
       <div class="nav-start" id="navStart"></div>
-      <div class="nav-title" id="navTitle"></div>
+      <div class="nav-title" id="navTitle" aria-hidden="true"></div>
       <div class="nav-end" id="navEnd"></div>
-    </div>
+    </nav>
   </header>
-  <div class="banner" id="banner" hidden></div>
   <main class="page" id="page"></main>
-  <div class="totalbar" id="totalBar" hidden></div>
+  <div class="foot" id="foot" hidden></div>
 </div>
 
-<div class="backdrop" id="backdrop" hidden></div>
-<section class="sheet" id="aiSheet" hidden aria-label="المساعد الذكي">
-  <div class="grabber"></div>
-  <div class="sheet-head"><span></span><h2>المساعد الذكي</h2><button class="nav-btn" type="button" data-close-sheet>تم</button></div>
-  <div class="ai-msgs" id="aiMsgs" aria-live="polite"></div>
-  <div class="ai-sugg" id="aiSugg"></div>
+<div id="overlay"></div>
+<div class="scrim" id="aiScrim" hidden></div>
+<section class="sheet ai" id="aiSheet" hidden aria-label="المساعد الذكي">
+  <div class="grabber" aria-hidden="true"></div>
+  <div class="sheet-head ai-head">
+    <div class="ai-title">
+      <div><span class="orb"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 3c.5 4.6 2.9 7 7.5 7.5-4.6.5-7 2.9-7.5 7.5-.5-4.6-2.9-7-7.5-7.5 4.6-.5 7-2.9 7.5-7.5z" fill="#FFFFFF"/><circle cx="19" cy="18" r="2.2" fill="#FFD60A"/></svg></span><h2>المساعد</h2></div>
+      <span>يعرف أرقام فروعك بس</span>
+    </div>
+    <button class="done" type="button" data-close-ai>تم</button>
+  </div>
+  <div class="ai-log"><div class="ai-msgs" id="aiMsgs" role="log" aria-live="polite"></div></div>
+  <div class="chips" id="aiChips"></div>
   <form class="ai-form" id="aiForm">
-    <input id="aiInput" autocomplete="off" placeholder="اسأل عن أي فرع أو يوم…" aria-label="سؤالك للمساعد">
-    <button id="aiSend" type="submit" aria-label="إرسال"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+    <div class="ai-field">
+      <input id="aiInput" autocomplete="off" placeholder="اسأل عن فرع أو يوم أو شهر…" aria-label="اكتب سؤالك">
+      <button class="ai-send" id="aiSend" type="submit" aria-label="إرسال"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="13.4" r="1.5" fill="currentColor"/><path d="M8 10.2V2.8M4.6 6L8 2.6 11.4 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
   </form>
 </section>
-<section class="sheet small" id="editSheet" hidden aria-label="تعديل الفروع"></section>
-<section class="sheet small" id="importSheet" hidden aria-label="استيراد البيانات"></section>
-<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"><span class="ti" id="toastIcon"></span><span class="tt" id="toastText"></span></div>
 <script type="module" src="app.js"></script>
 </body>
 </html>

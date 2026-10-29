@@ -1,5 +1,5 @@
 // يخزّن ملفات الموقع عشان يفتح بسرعة وحتى بدون إنترنت. البيانات نفسها يتولاها Firebase.
-const CACHE = 'daftar-v3';
+const CACHE = 'daftar-v4';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'config.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
