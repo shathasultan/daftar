@@ -703,9 +703,14 @@ async function aiAsk(text){
   let html;
   try{
     if(!aiModel){html='المساعد يشتغل بعد ما نربط الموقع بـ Firebase ونفعّل Gemini (AI Logic).';return}
+    // Check App Check first so a broken key shows its reason instead of leaving the question hanging
+    if(appCheck){
+      const r=await Promise.race([getToken(appCheck,false).then(()=>null,e=>`${e?.code||''} ${e?.message||e}`),new Promise(ok=>setTimeout(()=>ok('timeout'),12000))]);
+      if(r){html=`الحماية (App Check) ما قدرت تتحقق من الموقع، فما قدرت أرسل سؤالك. غالباً مفتاح Fraud Defense في Firebase ما يطابق الموقع.<div class="ai-err">${esc(r==='timeout'?'App Check: no token after 12s':r.trim().slice(0,260))}</div>`;return}
+    }
     let answer;
     for(;;){
-      try{answer=await aiRun(text);break}
+      try{answer=await Promise.race([aiRun(text),new Promise((_,no)=>setTimeout(()=>no(Object.assign(new Error('timeout after 45s'),{code:'timeout'})),45000))]);break}
       catch(e){if(aiModelIdx<AI_MODELS.length-1&&modelGone(String(e?.message||e))){aiModelIdx++;makeModel();continue}throw e}
     }
     html=mdLite(answer||'ما قدرت أطلع جواب. جرّب تصيغ السؤال بطريقة ثانية.');
@@ -713,6 +718,7 @@ async function aiAsk(text){
     const m=String(e?.message||e),code=e?.code||'';
     const msg=code==='api-not-enabled'||/api-not-enabled|not been used|has not been enabled|AI Logic/i.test(m)?'لازم تفعّل <b>AI Logic</b> في Firebase عشان يشتغل المساعد.':
       /quota|\b429\b|RESOURCE_EXHAUSTED/i.test(m)?'وصلنا للحد المجاني للمساعد حالياً. جرّب بعد شوي.':
+      code==='timeout'?'المساعد طوّل وما رد. جرّب مرة ثانية.':
       /App Check/i.test(m)?'المساعد ينتظر تفعيل حماية App Check. انتظر دقايق وجرّب مرة ثانية.':
       code==='fetch-error'&&!navigator.onLine?'ما فيه اتصال بالإنترنت.':'صار خطأ في الاتصال بالمساعد. جرّب مرة ثانية، وإذا تكرر صوّر الرسالة.';
     // When App Check rejects the request, ask App Check itself why it could not issue a valid token
