@@ -36,6 +36,7 @@
   --good:#45c08b; --bad:#ef7a72; --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 28px -14px rgba(0,0,0,.6); color-scheme:dark}
 
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.55}
 button,input,select{font:inherit;color:inherit}
 button{cursor:pointer}
@@ -220,6 +221,33 @@ dialog[open]{animation:pop .18s ease-out}
 .login-card .btn{justify-content:center;padding:12px}
 .login-err{color:var(--bad);font-size:13.5px}
 body{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+
+.ai-fab{position:fixed;bottom:calc(18px + env(safe-area-inset-bottom,0px));left:calc(18px + env(safe-area-inset-left,0px));z-index:15;display:inline-flex;align-items:center;gap:8px;border:0;border-radius:999px;padding:12px 18px;font-weight:600;background:var(--accent);color:#1b1206;box-shadow:0 10px 30px -8px color-mix(in oklab,var(--accent) 70%,transparent);transition:transform .15s}
+.ai-fab:hover{transform:translateY(-2px)}
+.ai-panel{position:fixed;bottom:calc(18px + env(safe-area-inset-bottom,0px));left:calc(18px + env(safe-area-inset-left,0px));z-index:16;width:min(390px,calc(100vw - 36px));height:min(600px,calc(100dvh - 120px));display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px -20px rgba(0,0,0,.45);animation:pop .18s ease-out}
+.ai-panel[hidden]{display:none!important}
+.ai-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.ai-head b{font-family:var(--f-display);font-size:16px;display:block}
+.ai-head span{font-size:12px;color:var(--muted)}
+.ai-msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
+.ai-msg{max-width:88%;padding:10px 13px;border-radius:14px;font-size:14.5px;line-height:1.65;overflow-wrap:anywhere}
+.ai-msg.bot{background:var(--surface-2);border:1px solid var(--line);align-self:flex-start;border-start-start-radius:4px}
+.ai-msg.me{background:var(--primary);color:var(--primary-ink);align-self:flex-end;border-start-end-radius:4px}
+.ai-msg ul{margin:4px 0;padding-inline-start:18px}
+.ai-dots{display:inline-flex;gap:4px;padding:4px 0}
+.ai-dots i{width:7px;height:7px;border-radius:50%;background:var(--muted);animation:blink 1s infinite}
+.ai-dots i:nth-child(2){animation-delay:.15s}.ai-dots i:nth-child(3){animation-delay:.3s}
+@keyframes blink{0%,100%{opacity:.25}50%{opacity:1}}
+.ai-sugg{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 10px}
+.ai-sugg button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 11px;font-size:12.5px}
+.ai-sugg button:hover{border-color:var(--accent)}
+.ai-form{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line);background:var(--surface-2)}
+.ai-form input{flex:1;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:10px 14px;font-size:16px;color:var(--ink)}
+@media (max-width:620px){
+  .ai-panel{left:0;right:0;bottom:0;width:100%;height:82dvh;border-radius:18px 18px 0 0;padding-bottom:env(safe-area-inset-bottom,0px)}
+  .ai-fab{padding:11px 15px}
+  .wrap{padding-bottom:90px}
+}
 </style>
 </head>
 <body>
@@ -274,6 +302,13 @@ body{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset
     </aside>
   </section>
   <section class="card year" id="yearSec"></section>
+  <button class="ai-fab" id="aiFab" type="button"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l1.9 5.6L19.5 9.5l-5.6 1.9L12 17l-1.9-5.6L4.5 9.5l5.6-1.9z"/><path d="M19 14l.9 2.6 2.6.9-2.6.9L19 21l-.9-2.6-2.6-.9 2.6-.9z" opacity=".7"/></svg>اسأل المساعد</button>
+  <section class="ai-panel card" id="aiPanel" hidden aria-label="المساعد الذكي">
+    <header class="ai-head"><div><b>المساعد الذكي</b><span>يجاوبك من أرقام الدفتر</span></div><button type="button" class="icon-btn" id="aiClose" aria-label="إغلاق المساعد">×</button></header>
+    <div class="ai-msgs" id="aiMsgs" aria-live="polite"></div>
+    <div class="ai-sugg" id="aiSugg"></div>
+    <form class="ai-form" id="aiForm"><input id="aiInput" autocomplete="off" placeholder="مثلاً: كم دخل فرع العليا هالأسبوع؟" aria-label="سؤالك للمساعد"><button class="btn primary" id="aiSend" type="submit">إرسال</button></form>
+  </section>
 </div>
 <dialog id="dayDlg"></dialog>
 <dialog id="brDlg"></dialog>

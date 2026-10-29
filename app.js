@@ -1,6 +1,7 @@
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
-import * as fs from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
+import * as fs from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
+import { getAI, getGenerativeModel, GoogleAIBackend, Schema } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-ai.js';
 import { firebaseConfig } from './config.js';
 
 const AR_MONTHS=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
@@ -242,6 +243,7 @@ const base=()=>`users/${uid}`;
 async function saveEntry(bid,date,v){
   const id=`${bid}_${date}`;
   const data={branchId:bid,date,year:+date.slice(0,4),month:date.slice(0,7),amount:v,updatedAt:new Date().toISOString()};
+  yearCache.delete(+date.slice(0,4));
   if(db){const ref=fs.doc(db,base(),'entries',id);return v==null?fs.deleteDoc(ref):fs.setDoc(ref,data)}
   v==null?S.entries.delete(id):S.entries.set(id,data);render();
 }
@@ -315,6 +317,157 @@ function exportCsv(){
   document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);
 }
 
+/* ---------- smart assistant ---------- */
+const WD_EN=['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+const yearCache=new Map();
+const r3=n=>Math.round(n*1000)/1000;
+const isDate=s=>/^\d{4}-\d{2}-\d{2}$/.test(s||'');
+const norm=s=>String(s||'').replace(/^\s*فرع\s+/,'').replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي').trim().toLowerCase();
+// null = no branch asked (all branches), undefined = name not found
+function resolveBranch(q){
+  if(!q) return null; const n=norm(q);
+  return S.branches.find(b=>norm(b.name)===n)||S.branches.find(b=>norm(b.name).includes(n)||n.includes(norm(b.name)));
+}
+async function entriesForYear(y){
+  if(y===S.year&&S.yearLoaded) return [...S.entries.values()];
+  if(!db) return [];
+  if(!yearCache.has(y)){
+    const snap=await fs.getDocs(fs.query(fs.collection(db,base(),'entries'),fs.where('year','==',y)));
+    yearCache.set(y,snap.docs.map(d=>d.data()));
+  }
+  return yearCache.get(y);
+}
+async function rangeEntries(from,to){
+  const y0=+from.slice(0,4),y1=+to.slice(0,4),ids=new Set(S.branches.map(b=>b.id)),out=[];
+  for(let y=y0;y<=y1&&y<=y0+5;y++) out.push(...await entriesForYear(y));
+  return out.filter(e=>e.date>=from&&e.date<=to&&ids.has(e.branchId));
+}
+function eachDay(from,to,fn){
+  const d=new Date(from+'T00:00'),end=new Date(to+'T00:00');
+  for(let i=0;d<=end&&i<4000;d.setDate(d.getDate()+1),i++) fn(ds(d.getFullYear(),d.getMonth(),d.getDate()),d.getDay());
+}
+const branchErr=q=>({error:`ما فيه فرع اسمه "${q}"`,branches:S.branches.map(b=>b.name)});
+const rangeErr=()=>({error:'التواريخ لازم تكون بصيغة YYYY-MM-DD'});
+
+const TOOLS={
+  async list_branches(){return {currency:cur().n,branches:S.branches.map(b=>b.name)}},
+  async get_totals({from,to,branch,weekday}){
+    if(!isDate(from)||!isDate(to)) return rangeErr();
+    const b=resolveBranch(branch); if(b===undefined) return branchErr(branch);
+    const wi=weekday?WD_EN.indexOf(weekday):-1;
+    const per={}; for(const x of S.branches) if(!b||x.id===b.id) per[x.name]={total:0,days_entered:0};
+    let total=0;
+    for(const e of await rangeEntries(from,to)){
+      if(b&&e.branchId!==b.id) continue;
+      if(wi>=0&&new Date(e.date+'T00:00').getDay()!==wi) continue;
+      const p=per[branchById(e.branchId).name]; p.total=r3(p.total+e.amount); p.days_entered++; total+=e.amount;
+    }
+    return {from,to,weekday:weekday||null,currency:cur().n,total:r3(total),per_branch:per};
+  },
+  async get_day({date}){
+    if(!isDate(date)) return rangeErr();
+    const es=await rangeEntries(date,date),amounts={};
+    for(const e of es) amounts[branchById(e.branchId).name]=e.amount;
+    return {date,weekday:DOW[new Date(date+'T00:00').getDay()],currency:cur().n,total:r3(es.reduce((s,e)=>s+e.amount,0)),
+      amounts,not_entered:S.branches.filter(b=>!(b.name in amounts)).map(b=>b.name)};
+  },
+  async get_daily({from,to,branch}){
+    if(!isDate(from)||!isDate(to)) return rangeErr();
+    const b=resolveBranch(branch); if(b===undefined) return branchErr(branch);
+    const by={}; for(const e of await rangeEntries(from,to)) if(!b||e.branchId===b.id) by[e.date]=(by[e.date]||0)+e.amount;
+    const days=[]; eachDay(from,to,(d,w)=>{if(d in by) days.push({date:d,weekday:DOW[w],total:r3(by[d])})});
+    return {branch:b?.name||'كل الفروع',days:days.slice(-120),truncated:days.length>120};
+  },
+  async find_missing_days({from,to,branch}){
+    if(!isDate(from)||!isDate(to)) return rangeErr();
+    const b=resolveBranch(branch); if(b===undefined) return branchErr(branch);
+    if(to>todayStr) to=todayStr;
+    const have=new Set((await rangeEntries(from,to)).map(e=>e.branchId+'|'+e.date)),list=[];
+    const targets=b?[b]:S.branches;
+    eachDay(from,to,(d,w)=>{const miss=targets.filter(x=>!have.has(x.id+'|'+d)).map(x=>x.name);if(miss.length) list.push({date:d,weekday:DOW[w],missing:miss})});
+    return {from,to,checked_until:to,missing_days_count:list.length,days:list.slice(0,100),truncated:list.length>100};
+  },
+};
+async function runTool(name,args){
+  try{return TOOLS[name]?await TOOLS[name](args||{}):{error:'أداة غير معروفة'}}catch(e){return {error:'تعذّر قراءة البيانات'}}
+}
+
+function aiDecls(){
+  const date=d=>Schema.string({description:`${d} بصيغة YYYY-MM-DD`});
+  const branch=Schema.string({description:'اسم الفرع كما يكتبه المستخدم. اتركه فاضي لكل الفروع'});
+  return [
+    {name:'list_branches',description:'أسماء الفروع والعملة'},
+    {name:'get_totals',description:'مجموع الدخل لفترة، لكل فرع ولكل الفروع. يقدر يحسب يوم معيّن من الأسبوع بس (مثل كل أيام الاثنين)',
+      parameters:Schema.object({properties:{from:date('أول يوم'),to:date('آخر يوم'),branch,
+        weekday:Schema.enumString({enum:WD_EN,description:'يوم الأسبوع إذا السؤال عن يوم معيّن من كل أسبوع'})},optionalProperties:['branch','weekday']})},
+    {name:'get_day',description:'دخل كل فرع في يوم واحد، والفروع اللي ما تسجّل دخلها ذاك اليوم',
+      parameters:Schema.object({properties:{date:date('اليوم')}})},
+    {name:'get_daily',description:'الدخل يوم بيوم لفترة، عشان أعلى يوم وأقل يوم والمقارنات',
+      parameters:Schema.object({properties:{from:date('أول يوم'),to:date('آخر يوم'),branch},optionalProperties:['branch']})},
+    {name:'find_missing_days',description:'الأيام اللي ما تسجّل فيها دخل فرع أو أكثر (لين اليوم)',
+      parameters:Schema.object({properties:{from:date('أول يوم'),to:date('آخر يوم'),branch},optionalProperties:['branch']})},
+  ];
+}
+function aiSystem(){
+  const t=new Date(),y=t.getFullYear(),m=t.getMonth();
+  return `أنت "المساعد الذكي" داخل موقع "دفتر الفروع"، تجاوب صاحب المحل عن دخل وأرباح فروعه.
+اليوم: ${todayStr} (${DOW[t.getDay()]}). هالشهر: ${ds(y,m,1)} إلى ${todayStr}. الشهر اللي فات: ${ds(m?y:y-1,(m+11)%12,1)} إلى ${ds(m?y:y-1,(m+11)%12,dim(m?y:y-1,(m+11)%12))}. هالسنة: ${y}-01-01 إلى ${todayStr}.
+الأسبوع يبدأ الأحد. "يوم الاثنين" بدون تاريخ يعني آخر اثنين مضى.
+القواعد:
+- أي رقم لازم يجي من الأدوات. لا تخمّن ولا تخترع أرقام. المجاميع خذها من الأداة كما هي.
+- إذا اسم الفرع مو واضح استخدم list_branches، وإذا ما لقيته قل للمستخدم الفروع الموجودة.
+- "يوم ناقص" أو "ما عبّيته" أو "نسيت أسجّل" تعني find_missing_days.
+- جاوب باللهجة الخليجية، باختصار ووضوح. اكتب الأرقام بفواصل الآلاف ومعها العملة. استخدم نقاط قصيرة إذا فيه أكثر من فرع.
+- إذا السؤال مو عن الدفتر، قل بلطف إنك مختص بأرقام الدفتر.`;
+}
+let aiModel=null,aiChat=null,aiBusy=false;
+function initAI(app){
+  try{aiModel=getGenerativeModel(getAI(app,{backend:new GoogleAIBackend()}),
+    {model:'gemini-2.5-flash',systemInstruction:aiSystem(),tools:[{functionDeclarations:aiDecls()}]})}catch(e){aiModel=null}
+}
+function mdLite(s){
+  return esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').split('\n').map(l=>/^\s*[-*•]\s+/.test(l)?`<li>${l.replace(/^\s*[-*•]\s+/,'')}</li>`:l)
+    .join('\n').replace(/(<li>.*<\/li>\n?)+/g,m=>`<ul>${m.replace(/\n/g,'')}</ul>`).replace(/\n/g,'<br>');
+}
+function aiMsg(role,html){
+  const el=document.createElement('div');el.className='ai-msg '+role;el.innerHTML=html;$('aiMsgs').appendChild(el);
+  $('aiMsgs').scrollTop=$('aiMsgs').scrollHeight;return el;
+}
+async function aiAsk(text){
+  text=text.trim();if(!text||aiBusy)return;
+  aiBusy=true;$('aiSugg').hidden=true;$('aiSend').disabled=true;
+  aiMsg('me',esc(text));const wait=aiMsg('bot','<span class="ai-dots"><i></i><i></i><i></i></span>');
+  try{
+    if(!aiModel){wait.innerHTML='المساعد يشتغل بعد ما نربط الموقع بـ Firebase ونفعّل Gemini (AI Logic).';return}
+    aiChat??=aiModel.startChat();
+    let r=await aiChat.sendMessage(text);
+    for(let i=0;i<6;i++){
+      const calls=r.response.functionCalls();if(!calls?.length)break;
+      const parts=await Promise.all(calls.map(async c=>({functionResponse:{name:c.name,response:await runTool(c.name,c.args)}})));
+      r=await aiChat.sendMessage(parts);
+    }
+    wait.innerHTML=mdLite(r.response.text()||'ما قدرت أطلع جواب. جرّب تصيغ السؤال بطريقة ثانية.');
+  }catch(e){
+    const m=String(e?.message||e);
+    wait.innerHTML=/api-not-enabled|not been used|disabled|AI Logic/i.test(m)?'لازم تفعّل <b>AI Logic</b> في Firebase عشان يشتغل المساعد.':
+      /quota|429|RESOURCE_EXHAUSTED/i.test(m)?'وصلنا للحد المجاني للمساعد حالياً. جرّب بعد شوي.':'صار خطأ في الاتصال بالمساعد. تأكد من الإنترنت وجرّب مرة ثانية.';
+    aiChat=null;
+  }finally{aiBusy=false;$('aiSend').disabled=false}
+}
+const AI_SUGG=['كم إجمالي كل فرع هالشهر؟','وش الأيام اللي ما عبّيتها هالشهر؟','كم دخلنا يوم الاثنين اللي فات؟','أي فرع أعلى أرباح هالسنة؟'];
+function openAI(on){
+  $('aiPanel').hidden=!on;$('aiFab').hidden=on;
+  if(on){
+    if(!$('aiMsgs').children.length) aiMsg('bot','هلا! اسألني عن أي فرع أو يوم أو شهر، وأجاوبك من أرقام الدفتر.');
+    if(!matchMedia('(pointer:coarse)').matches) $('aiInput').focus();
+  }
+}
+$('aiSugg').innerHTML=AI_SUGG.map(s=>`<button type="button">${s}</button>`).join('');
+$('aiSugg').addEventListener('click',e=>{const b=e.target.closest('button');if(b)aiAsk(b.textContent)});
+$('aiFab').onclick=()=>openAI(true);
+$('aiClose').onclick=()=>openAI(false);
+$('aiForm').addEventListener('submit',e=>{e.preventDefault();const i=$('aiInput');aiAsk(i.value);i.value=''});
+
 /* ---------- auth & boot ---------- */
 const authMsg={'auth/invalid-credential':'الإيميل أو كلمة السر غلط.','auth/wrong-password':'كلمة السر غلط.','auth/user-not-found':'ما فيه حساب بهذا الإيميل.',
   'auth/too-many-requests':'محاولات كثيرة. انتظر شوي وجرّب.','auth/network-request-failed':'ما فيه اتصال بالإنترنت.','auth/invalid-email':'اكتب الإيميل بشكل صحيح.'};
@@ -340,9 +493,10 @@ if(!firebaseConfig){
 }else{
   const app=initializeApp(firebaseConfig);
   const auth=getAuth(app);
+  initAI(app);
   db=fs.initializeFirestore(app,{localCache:fs.persistentLocalCache({tabManager:fs.persistentMultipleTabManager()})});
   onAuthStateChanged(auth,u=>{
-    if(u){uid=u.uid;showLogin(false);startLive()}
+    if(u){uid=u.uid;yearCache.clear();aiChat=null;showLogin(false);startLive()}
     else{uid=null;stopLive();S.branches=[];S.entries=new Map();S.mode='loading';showLogin(true);render()}
   });
   $('loginForm').addEventListener('submit',async e=>{e.preventDefault();
