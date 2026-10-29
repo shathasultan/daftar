@@ -192,6 +192,38 @@ h1,h2,p{margin:0}
 .toast.bad .ti{background:var(--red)}
 .toast .tt{overflow:hidden;text-overflow:ellipsis}
 
+/* expenses */
+.seg2{margin-top:14px;display:flex;background:var(--fill);border-radius:9px;padding:2px;max-width:360px}
+.seg2 button{flex:1;height:32px;border-radius:7px;font-size:14px;font-weight:600;color:var(--lab);transition:background-color .2s}
+.seg2 button.on{background:#636366;box-shadow:0 3px 8px rgba(0,0,0,.12),0 0 0 .5px rgba(0,0,0,.04)}
+.x-row{display:flex;align-items:center;gap:10px;min-height:66px;padding:8px 12px 8px 16px}
+.x-row+.x-row{border-top:.5px solid var(--sep);border-image:linear-gradient(to left,transparent 16px,var(--sep) 16px) 1}
+.x-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.x-name{width:100%;border:0;outline:none;background:transparent;color:var(--lab);caret-color:var(--blue);font-size:17px;font-weight:500;padding:2px 0}
+.x-name::placeholder{color:var(--ter)}
+.x-acts{display:flex;gap:8px;align-items:center}
+.x-fix{height:24px;padding:0 9px;border-radius:12px;background:var(--fill);color:var(--sec);font-size:12px;font-weight:600}
+.x-fix.on{background:var(--col-tint);color:var(--link)}
+.x-del{height:24px;padding:0 6px;color:var(--red-tx);font-size:12px;font-weight:600}
+.x-field{width:128px}
+.x-row.err .field input{background:var(--err-bg);border-color:var(--red);color:var(--red-tx)}
+.x-add{background:var(--card);border-radius:14px;display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:10px 12px 10px 16px}
+.x-add>input{flex:1 1 140px;min-width:0;height:44px;border:0;outline:none;background:transparent;color:var(--lab);caret-color:var(--blue);font-size:17px}
+.x-add>input::placeholder{color:var(--ter)}
+.net{margin-top:24px;padding:6px 16px}
+.nr{display:flex;justify-content:space-between;align-items:baseline;min-height:44px;padding:10px 0;font-size:17px}
+.nr+.nr{border-top:.5px solid var(--sep)}
+.nr span{color:var(--sec)}
+.nr b{font-weight:600}
+.nr.tot span{color:var(--lab);font-weight:600}
+.nr.tot b{font-family:var(--display);font-size:22px;font-weight:700}
+.pos{color:var(--green-tx)}.neg{color:var(--red-tx)}
+.netline{margin-top:12px;padding-top:12px;border-top:.5px solid var(--sep);display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.netline div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.netline span{font-size:12px;line-height:16px;color:var(--sec)}
+.netline b{font-size:17px;line-height:22px;font-weight:700}
+.tbl td.neg{color:var(--red-tx)}
+
 /* ---------- report ---------- */
 .year-card{margin-top:16px;padding:16px 16px 18px}
 .year-card .sub{margin-top:4px;font-size:13px;line-height:18px;color:var(--sec)}

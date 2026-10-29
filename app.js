@@ -14,8 +14,8 @@ const DARK=['#0A84FF','#FF9F0A','#30D158','#BF5AF2','#FF375F','#40C8E0','#FFD60A
 const ICON_GRAD=['linear-gradient(180deg,#3A93FF 0%,#0A64E0 100%)','linear-gradient(180deg,#E8811A 0%,#B05000 100%)','linear-gradient(180deg,#31A955 0%,#1A7A36 100%)'];
 const CUR='ر.س';
 const now=new Date();
-const S={view:'home',branchId:null,year:now.getFullYear(),month:now.getMonth(),branches:[],entries:new Map(),months:new Map(),
-  yearLoaded:false,mode:'loading',rendered:''};
+const S={view:'home',branchId:null,year:now.getFullYear(),month:now.getMonth(),branches:[],entries:new Map(),months:new Map(),expenses:new Map(),
+  yearLoaded:false,mode:'loading',rendered:'',tab:'income',metric:'income'};
 let db=null,uid=null,unsubYear=[],unsubs=[],appCheck=null;
 
 const $=id=>document.getElementById(id);
@@ -23,6 +23,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const pad=n=>String(n).padStart(2,'0');
 const ds=(y,m,d)=>`${y}-${pad(m+1)}-${pad(d)}`;
 const dim=(y,m)=>new Date(y,m+1,0).getDate();
+const ym=(y,m)=>`${y}-${pad(m+1)}`;
 const todayStr=ds(now.getFullYear(),now.getMonth(),now.getDate());
 const nf=new Intl.NumberFormat('en-US',{maximumFractionDigits:2});
 const fmt=n=>nf.format(n||0);
@@ -88,6 +89,10 @@ function compute(){
 const cellTotal=c=>c.days?c.daily:(c.paper??0);
 const monthAll=(bm,m)=>S.branches.reduce((s,b)=>s+cellTotal(bm[b.id][m]),0);
 const entryOf=(bid,date)=>S.entries.get(`${bid}_${date}`);
+// Expenses: one document per branch and month holding its list of items
+const expOf=(bid,y,m)=>S.expenses.get(`${bid}_${ym(y,m)}`);
+const expTotal=doc=>(doc?.items||[]).reduce((s,i)=>s+(typeof i.amount==='number'?i.amount:0),0);
+const expMonthAll=m=>S.branches.reduce((s,b)=>s+expTotal(expOf(b.id,S.year,m)),0);
 // Days of the month that count as due: up to today in the current month, all days in past months, none in future months
 const dueDays=(y,m)=>isFutureMonth(y,m)?0:(y===now.getFullYear()&&m===now.getMonth()?now.getDate():dim(y,m));
 
@@ -108,8 +113,8 @@ function monthSwitch(){
 
 function render(){
   if(S.view==='branch'&&!branchById(S.branchId)&&S.mode==='live'){location.hash='';return}
-  const key=`${S.view}|${S.branchId}|${S.year}|${S.month}`;
-  if(S.view==='branch'&&S.rendered===key&&$('days')){patchBranch();return}
+  const key=`${S.view}|${S.branchId}|${S.year}|${S.month}|${S.tab}|${S.metric}`;
+  if(S.view==='branch'&&S.rendered===key&&($('days')||$('exp'))){patchBranch();return}
   const fresh=S.rendered.split('|').slice(0,2).join('|')!==`${S.view}|${S.branchId}`;
   S.rendered=key;
   if(S.view==='branch') renderBranch(); else if(S.view==='report') renderReport(); else renderHome();
@@ -207,12 +212,13 @@ function renderHome(){
       <div class="b-sub">${sub}${missTx}</div>
       <div class="dots" role="img" aria-label="أيام ${AR_MONTHS[m]}: ${c.days} مسجّلة${miss?` و${miss} ناقصة`:''}">${dots}</div></div></a>`;
   }).join('');
-  const yearTotal=AR_MONTHS.reduce((s,_,i)=>s+monthAll(bm,i),0);
+  const yearTotal=AR_MONTHS.reduce((s,_,i)=>s+monthAll(bm,i),0),expAll=expMonthAll(m);
   $('page').innerHTML=`${head}${monthSwitch()}
     <section class="card total" aria-label="مجموع كل الفروع">
       <div class="total-top"><span class="k-label">مجموع كل الفروع · ${AR_MONTHS[m]} ${y}</span>${delta}</div>
       <div class="big"><span class="n tnum">${fmt(total)}</span><span class="cur">${CUR}</span></div>
       ${chart}<div class="split">${split}</div>
+      ${expAll?`<div class="netline"><div><span>المصاريف</span><b class="tnum">${fmt(expAll)} ${CUR}</b></div><div><span>الصافي</span><b class="tnum ${total-expAll>=0?'pos':'neg'}">${fmt(total-expAll)} ${CUR}</b></div></div>`:''}
     </section>
     ${todayCard}
     <div class="sec-row"><h2 class="h2">الفروع</h2><button type="button" data-act="edit">تعديل</button></div>
@@ -244,14 +250,18 @@ function renderBranch(){
     <div class="pv"><b class="tnum">${fmt(c.paper)}</b><span>${CUR}</span></div>
     <div class="pn">${c.days?'بدأت تعبّي الأيام، فصار مجموع الشهر يتحسب من الأيام اللي تحت.':'ما فيه أرقام يومية لهذا الشهر — انكتب من الدفتر الورقي كمجموع واحد.'}</div></div></section>`:'';
   $('page').classList.add('has-bar');
+  const income=S.tab!=='expenses';
   $('page').innerHTML=`<header class="head" style="display:block"><div class="b-head"><div class="b-icon tnum" style="background:${grad(b)}">${esc(badge(b))}</div><h1 class="title">${esc(b.name)}</h1></div>
-    <p class="subline">الدخل اليومي · ${mon} ${y}</p></header>
-    ${monthSwitch()}<div id="paperNote">${paper}</div><div id="days">${h}</div>`;
+    <p class="subline">${income?'الدخل اليومي':'المصاريف'} · ${mon} ${y}</p></header>
+    ${monthSwitch()}
+    <div class="seg2" role="tablist" aria-label="الدخل والمصاريف"><button type="button" role="tab" data-tab="income" aria-selected="${income}" class="${income?'on':''}">الدخل</button><button type="button" role="tab" data-tab="expenses" aria-selected="${!income}" class="${income?'':'on'}">المصاريف</button></div>
+    ${income?`<div id="paperNote">${paper}</div><div id="days">${h}</div>`:`<div id="exp"></div>`}`;
   $('foot').hidden=false;
-  updateTotals();
+  if(income) updateTotals(); else renderExpenses();
 }
 // Refresh values from the store without disturbing the field being typed in
 function patchBranch(){
+  if(S.tab==='expenses'){patchExpenses();return}
   for(const inp of $('days').querySelectorAll('input')){
     if(inp===document.activeElement||pending.has(inp.id)) continue;
     const e=entryOf(S.branchId,inp.dataset.date),v=e?fmt(e.amount):'';
@@ -284,6 +294,122 @@ function updateTotals(){
   if(lastTotal!==null&&lastTotal!==total) setTimeout(()=>$('footVal')?.classList.remove('pulse'),180);
   lastTotal=total;
 }
+
+/* ---------- expenses ---------- */
+// Items carried to a new month are the ones marked "ثابت" (rent, salaries, internet…), with last month's amounts
+const newId=()=>Math.random().toString(36).slice(2,10);
+let expDraft=null,expTimer=null,autoCarried=new Set();
+function prevExp(bid,y,m){
+  for(let k=1;k<=12;k++){
+    let mm=m-k,yy=y;while(mm<0){mm+=12;yy--}
+    const id=`${bid}_${ym(yy,mm)}`,d=yy===S.year?S.expenses.get(id):yearCache.get(yy)?.expenses?.find(e=>`${e.branchId}_${e.month}`===id);
+    if(d?.items?.length) return {doc:d,y:yy,m:mm};
+  }
+  return null;
+}
+const carried=p=>p.doc.items.filter(i=>i.fixed).map(i=>({id:newId(),name:i.name,amount:i.amount??null,fixed:true}));
+function draftFor(bid,y,m){
+  const key=`${bid}_${ym(y,m)}`;
+  if(!expDraft||expDraft.key!==key){if(expTimer)saveExpDraft();const d=S.expenses.get(key);expDraft={key,bid,y,m,exists:!!d,items:(d?.items||[]).map(i=>({...i}))}}
+  return expDraft;
+}
+async function saveExpDraft(){
+  clearTimeout(expTimer);expTimer=null;
+  const d=expDraft;if(!d) return;
+  const items=d.items.map(({id,name,amount,fixed})=>({id,name:String(name||'').trim(),amount:typeof amount==='number'?amount:null,fixed:!!fixed})).filter(i=>i.name||i.amount!=null);
+  const data={branchId:d.bid,month:ym(d.y,d.m),year:d.y,items,updatedAt:new Date().toISOString()};
+  try{
+    if(db) await fs.setDoc(fs.doc(db,base(),'expenses',d.key),data); else S.expenses.set(d.key,data);
+    d.exists=true;yearCache.delete(d.y);
+  }catch(err){toast(errMsg(err),true)}
+}
+function scheduleExp(){clearTimeout(expTimer);expTimer=setTimeout(saveExpDraft,700)}
+function renderExpenses(){
+  const b=branchById(S.branchId),y=S.year,m=S.month,mon=AR_MONTHS[m],d=draftFor(b.id,y,m);
+  const prev=d.items.length?null:prevExp(b.id,y,m);
+  // The running month picks up its fixed items by itself the first time it is opened
+  if(!d.exists&&!d.items.length&&prev&&isCurMonth()&&!autoCarried.has(d.key)){
+    autoCarried.add(d.key);d.items=carried(prev);if(d.items.length){saveExpDraft();toast(`نقلت البنود الثابتة من ${AR_MONTHS[prev.m]}`)}
+  }
+  if(!prev&&!d.items.length&&!yearCache.has(y-1)&&db&&m<11) yearData(y-1).then(()=>{if(S.tab==='expenses')renderExpenses()}).catch(()=>{});
+  const rows=d.items.map(it=>`<div class="x-row" data-id="${it.id}">
+      <div class="x-main"><input class="x-name" data-xname="${it.id}" value="${esc(it.name)}" placeholder="اسم البند" maxlength="60" aria-label="اسم البند">
+        <div class="x-acts"><button type="button" class="x-fix${it.fixed?' on':''}" data-xfix="${it.id}" aria-pressed="${!!it.fixed}">${it.fixed?'ثابت كل شهر':'مرة وحدة'}</button><button type="button" class="x-del" data-xdel="${it.id}">حذف</button></div></div>
+      <span class="field x-field"><input data-xamt="${it.id}" type="text" inputmode="decimal" autocomplete="off" dir="ltr" value="${it.amount!=null?fmt(it.amount):''}" aria-label="مبلغ ${esc(it.name)}"><span class="dash" aria-hidden="true"${it.amount!=null?' hidden':''}>—</span><span class="sar" aria-hidden="true">${CUR}</span></span>
+    </div>`).join('');
+  const source=S.expenses.get(d.key)?.source==='paper'?`<p class="note-text">هذي المصاريف منقولة من الدفتر الورقي.</p>`:'';
+  $('exp').innerHTML=`
+    <div class="week-head"><span>بيان المخروج</span><span class="tnum" id="xSum"></span></div>
+    ${d.items.length?`<div class="list" id="xList">${rows}</div>${source}`:`<div class="card empty-card" style="margin-top:0;padding:28px 20px">
+      <h2 style="margin-top:0;font-size:19px">ما فيه مصاريف لـ ${mon}</h2><p>أضف أول بند تحت${prev?`، أو انقل البنود الثابتة من ${AR_MONTHS[prev.m]}`:''}.</p>
+      ${prev?`<button class="pill-btn" type="button" data-xcarry="1" style="margin-top:18px">انقل البنود الثابتة من ${AR_MONTHS[prev.m]}</button>`:''}</div>`}
+    <p class="cap gap" style="margin-top:24px">بند جديد</p>
+    <form class="x-add" id="xAdd"><input id="xNewName" placeholder="مثلاً: كهرباء" maxlength="60" aria-label="اسم البند الجديد" autocomplete="off">
+      <span class="field x-field"><input id="xNewAmt" type="text" inputmode="decimal" dir="ltr" autocomplete="off" aria-label="مبلغ البند الجديد"><span class="dash" aria-hidden="true">—</span><span class="sar" aria-hidden="true">${CUR}</span></span>
+      <button class="e-add" id="xAddBtn" type="submit" disabled>إضافة</button></form>
+    <p class="note-text">«ثابت كل شهر» ينتقل لحاله للشهر الجاي بنفس المبلغ، وتعدّله إذا تغيّر.</p>
+    <section class="card net" id="xNet" aria-label="الصافي"></section>`;
+  updateExpTotals();
+}
+function updateExpTotals(){
+  const d=expDraft;if(!d||!$('exp')) return;
+  const total=d.items.reduce((s,i)=>s+(typeof i.amount==='number'?i.amount:0),0);
+  const inc=cellTotal(compute()[d.bid][d.m]),net=inc-total;
+  if($('xSum')) $('xSum').textContent=d.items.length?`${fmt(total)} ${CUR}`:'';
+  $('xNet').innerHTML=`<div class="nr"><span>الدخل</span><b class="tnum">${fmt(inc)} ${CUR}</b></div><div class="nr"><span>المصاريف</span><b class="tnum">− ${fmt(total)} ${CUR}</b></div>
+    <div class="nr tot"><span>الصافي</span><b class="tnum ${net>=0?'pos':'neg'}">${fmt(net)} ${CUR}</b></div>`;
+  const fv=$('footVal'),changed=lastTotal!==null&&lastTotal!==total;
+  $('foot').innerHTML=`<div class="foot-in"><div class="fl"><div class="k-label">مصاريف ${AR_MONTHS[d.m]}</div>
+    <div class="fv${changed?' pulse':''}" id="footVal"><b class="tnum">${fmt(total)}</b><span>${CUR}</span></div><div class="fs tnum">الصافي ${fmt(net)} ${CUR} · ${d.items.length} بند</div></div></div>`;
+  if(changed) setTimeout(()=>$('footVal')?.classList.remove('pulse'),180);
+  lastTotal=total;
+}
+function patchExpenses(){
+  // Keep the list as typed while editing or saving; otherwise reload it from the store
+  if(expTimer||$('exp')?.contains(document.activeElement)){updateExpTotals();return}
+  expDraft=null;renderExpenses();
+}
+$('page').addEventListener('input',e=>{
+  const t=e.target,d=expDraft;
+  if(t.id==='xNewName'||t.id==='xNewAmt'){
+    if(t.id==='xNewAmt'){const n=normDigits(t.value);if(n!==t.value)t.value=n;t.parentElement.querySelector('.dash').hidden=t.value.trim()!==''}
+    const ok=$('xNewName').value.trim()&&!Number.isNaN(parseAmount($('xNewAmt').value));$('xAddBtn').disabled=!ok;$('xAddBtn').classList.toggle('on',!!ok);return;
+  }
+  if(!d) return;
+  const id=t.dataset.xamt||t.dataset.xname;if(!id) return;
+  const it=d.items.find(i=>i.id===id);if(!it) return;
+  if(t.dataset.xname){it.name=t.value}
+  else{
+    const n=normDigits(t.value);if(n!==t.value)t.value=n;
+    const v=parseAmount(t.value),row=t.closest('.x-row');
+    row.classList.toggle('err',Number.isNaN(v));row.querySelector('.dash').hidden=t.value.trim()!=='';
+    if(Number.isNaN(v)){toast('اكتب أرقام بس، بدون حروف',true);return}
+    it.amount=v;
+  }
+  updateExpTotals();scheduleExp();
+});
+$('page').addEventListener('change',e=>{
+  const t=e.target;if(!t.dataset.xamt) return;
+  const v=parseAmount(t.value);if(v!=null&&!Number.isNaN(v)) t.value=fmt(v);
+  if(expTimer) saveExpDraft().then(()=>toast('تم الحفظ'));
+});
+$('page').addEventListener('click',e=>{
+  const t=e.target.closest('[data-tab],[data-xfix],[data-xdel],[data-xcarry]');if(!t) return;
+  if(t.dataset.tab){if(S.tab!==t.dataset.tab){if(expTimer)saveExpDraft();S.tab=t.dataset.tab;lastTotal=null;expDraft=null;render()}return}
+  const d=expDraft;if(!d) return;
+  if(t.dataset.xcarry){const p=prevExp(d.bid,d.y,d.m);if(p){d.items=carried(p);saveExpDraft();renderExpenses();toast(`نقلت البنود الثابتة من ${AR_MONTHS[p.m]}`)}return}
+  const it=d.items.find(i=>i.id===(t.dataset.xfix||t.dataset.xdel));if(!it) return;
+  if(t.dataset.xfix){it.fixed=!it.fixed;t.classList.toggle('on',it.fixed);t.textContent=it.fixed?'ثابت كل شهر':'مرة وحدة';t.setAttribute('aria-pressed',it.fixed);saveExpDraft()}
+  else{d.items=d.items.filter(i=>i!==it);saveExpDraft().then(()=>toast(`انحذف «${it.name}»`));renderExpenses()}
+});
+$('page').addEventListener('submit',e=>{
+  if(e.target.id!=='xAdd') return;
+  e.preventDefault();const d=expDraft;if(!d) return;
+  const name=$('xNewName').value.trim(),v=parseAmount($('xNewAmt').value);if(!name||Number.isNaN(v)) return;
+  d.items.push({id:newId(),name,amount:v,fixed:false});
+  saveExpDraft().then(()=>toast(`تمت إضافة «${name}»`));renderExpenses();
+  setTimeout(()=>$('xNewName')?.focus(),0);
+});
 
 /* ---------- daily entry ---------- */
 const pending=new Map();
@@ -336,18 +462,23 @@ function renderReport(){
   }).join('');
   const nums=AR_MONTHS.map((_,i)=>`<div><span class="tnum${i===S.month?' on':''}">${i+1}</span></div>`).join('');
   const head=`<tr><th scope="col" class="sr">الفرع</th>${AR_MONTHS.map((n,i)=>`<th scope="col" class="${i===S.month?'on':''}">${n}</th>`).join('')}<th scope="col" class="sl">المجموع</th></tr>`;
-  const cells=vals=>vals.map((v,i)=>`<td class="${i===S.month?'on':''}${v?'':' z'}">${v?fmt(v):'—'}</td>`).join('');
-  const body=S.branches.map(b=>{const r=bm[b.id].map(cellTotal);return `<tr><th scope="row" class="sr"><span class="nm"><i style="background:${tone(b)}"></i><span>${esc(shortName(b))}</span></span></th>${cells(r)}<td class="sl">${fmt(r.reduce((a,c)=>a+c,0))}</td></tr>`}).join('');
-  const all=`<tr class="all"><th scope="row" class="sr"><span class="nm"><i style="background:var(--lab)"></i><span>كل الفروع</span></span></th>${cells(mt)}<td class="sl">${fmt(yt)}</td></tr>`;
+  const met=S.metric,expRow=b=>AR_MONTHS.map((_,i)=>expTotal(expOf(b.id,y,i))),incRow=b=>bm[b.id].map(cellTotal);
+  const rowOf=b=>met==='expenses'?expRow(b):met==='net'?incRow(b).map((v,i)=>{const e=expRow(b)[i];return v||e?v-e:0}):incRow(b);
+  const allRow=AR_MONTHS.map((_,i)=>S.branches.reduce((s,b)=>s+rowOf(b)[i],0));
+  const yExp=AR_MONTHS.reduce((s,_,i)=>s+expMonthAll(i),0);
+  const cells=vals=>vals.map((v,i)=>`<td class="${i===S.month?'on':''}${v?'':' z'}${v<0?' neg':''}">${v?fmt(v):'—'}</td>`).join('');
+  const body=S.branches.map(b=>{const r=rowOf(b);return `<tr><th scope="row" class="sr"><span class="nm"><i style="background:${tone(b)}"></i><span>${esc(shortName(b))}</span></span></th>${cells(r)}<td class="sl">${fmt(r.reduce((a,c)=>a+c,0))}</td></tr>`}).join('');
+  const all=`<tr class="all"><th scope="row" class="sr"><span class="nm"><i style="background:var(--lab)"></i><span>كل الفروع</span></span></th>${cells(allRow)}<td class="sl">${fmt(allRow.reduce((a,c)=>a+c,0))}</td></tr>`;
   const paperMonths=[...new Set([...S.months.values()].filter(x=>{const c=bm[x.branchId]?.[+x.month.slice(5,7)-1];return c&&!c.days}).map(x=>+x.month.slice(5,7)-1))].sort((a,b)=>a-b);
   $('page').innerHTML=`<header class="head"><h1 class="title">التقرير السنوي</h1></header>
     <div class="switch" role="group" aria-label="السنة"><button type="button" data-ystep="-1" aria-label="السنة السابقة"><span class="knob">${IC.prev}</span></button>
       <span class="label tnum" style="min-width:56px">${y}</span><button type="button" data-ystep="1" aria-label="السنة التالية"${y>=now.getFullYear()?' disabled':''}><span class="knob">${IC.next}</span></button></div>
-    <section class="card year-card"><div class="k-label">مجموع سنة ${y} لكل الفروع</div><div class="big" style="margin-top:4px"><span class="n tnum">${fmt(yt)}</span><span class="cur">${CUR}</span></div><div class="sub">${sub}</div></section>
+    <section class="card year-card"><div class="k-label">مجموع سنة ${y} لكل الفروع</div><div class="big" style="margin-top:4px"><span class="n tnum">${fmt(yt)}</span><span class="cur">${CUR}</span></div><div class="sub">${sub}</div>${yExp?`<div class="netline"><div><span>المصاريف</span><b class="tnum">${fmt(yExp)} ${CUR}</b></div><div><span>الصافي</span><b class="tnum ${yt-yExp>=0?'pos':'neg'}">${fmt(yt-yExp)} ${CUR}</b></div></div>`:''}</section>
     ${S.branches.length?`<section class="card chart-card" aria-label="الدخل لكل شهر"><div class="ch"><h2>الدخل لكل شهر</h2><span>${CUR}</span></div>
       <div class="chart-wrap"><div class="pl"><div class="plot">${grid}<div class="bars" role="img" aria-label="أعمدة الدخل الشهري لسنة ${y} مقسومة على الفروع">${bars}</div></div><div class="mnums">${nums}</div></div><div class="yaxis tnum" aria-hidden="true">${yax}</div></div>
       <div class="legend">${S.branches.map(b=>`<div><i style="background:${tone(b)}"></i><span>${esc(b.name)}</span></div>`).join('')}</div></section>
     <h2 class="h2" style="margin:28px 4px 8px">حسب الفرع</h2>
+    <div class="seg2" role="tablist" aria-label="نوع الأرقام" style="margin:0 0 10px">${[['income','الدخل'],['expenses','المصاريف'],['net','الصافي']].map(([k,l])=>`<button type="button" role="tab" data-metric="${k}" aria-selected="${met===k}" class="${met===k?'on':''}">${l}</button>`).join('')}</div>
     <div class="card tbl"><table><thead>${head}</thead><tbody>${body}${all}</tbody></table></div>
     <p class="note-text">اسحب الجدول يمين ويسار تشوف كل الأشهر.${paperMonths.length?` أرقام ${paperMonths.map(i=>AR_MONTHS[i]).join(' و')} من الدفتر الورقي.`:''}</p>
     <button class="excel" type="button" data-act="csv"><span class="xl" aria-hidden="true"><span style="background:#fff"></span><span style="background:#fff"></span><span style="background:#fff"></span><span></span><span></span><span style="background:#30D158"></span><span></span><span style="background:#FF9F0A"></span><span></span></span><span>تنزيل التقرير كملف Excel</span></button>`:''}`;
@@ -431,7 +562,7 @@ async function saveBranch(id,patch){
 async function deleteBranch(id){
   if(db){
     const refs=[fs.doc(db,base(),'branches',id)];
-    for(const col of ['entries','months']){
+    for(const col of ['entries','months','expenses']){
       const snap=await fs.getDocs(fs.query(fs.collection(db,base(),col),fs.where('branchId','==',id)));
       refs.push(...snap.docs.map(d=>d.ref));
     }
@@ -444,10 +575,11 @@ async function deleteBranch(id){
 function subscribeYear(){
   unsubYear.forEach(u=>u());unsubYear=[];
   if(!db){S.yearLoaded=true;return}
-  S.yearLoaded=false;S.entries=new Map();S.months=new Map();
+  S.yearLoaded=false;S.entries=new Map();S.months=new Map();S.expenses=new Map();expDraft=null;
   const q=col=>fs.query(fs.collection(db,base(),col),fs.where('year','==',S.year));
   unsubYear.push(fs.onSnapshot(q('entries'),s=>{S.entries=new Map(s.docs.map(d=>[d.id,d.data()]));S.yearLoaded=true;render()},e=>toast(errMsg(e),true)));
   unsubYear.push(fs.onSnapshot(q('months'),s=>{S.months=new Map(s.docs.map(d=>[d.id,d.data()]));render()},()=>{}));
+  unsubYear.push(fs.onSnapshot(q('expenses'),s=>{S.expenses=new Map(s.docs.map(d=>[d.id,d.data()]));render()},()=>{}));
 }
 function step(dm){
   let y=S.year,m=S.month+dm;if(m<0){m=11;y--}if(m>11){m=0;y++}
@@ -468,10 +600,11 @@ window.addEventListener('hashchange',route);
 function onScroll(){const s=window.scrollY>36;$('nav').classList.toggle('scrolled',s);$('nav').classList.toggle('on',s)}
 window.addEventListener('scroll',onScroll,{passive:true});
 document.addEventListener('click',e=>{
-  const t=e.target.closest('[data-mstep],[data-ystep],[data-act],[data-month]');if(!t) return;
+  const t=e.target.closest('[data-mstep],[data-ystep],[data-act],[data-month],[data-metric]');if(!t) return;
   if(t.dataset.mstep){step(+t.dataset.mstep);return}
   if(t.dataset.ystep){S.year+=+t.dataset.ystep;subscribeYear();render();return}
   if(t.dataset.month){S.month=+t.dataset.month;render();return}
+  if(t.dataset.metric){S.metric=t.dataset.metric;render();return}
   const a=t.dataset.act;
   if(a==='edit') openEdit();
   if(a==='ai') openAI();
@@ -484,6 +617,12 @@ function exportCsv(){
   const bm=compute(),q=v=>`"${String(v).replace(/"/g,'""')}"`,rows=[[`مجموع سنة ${S.year} (ريال سعودي)`],['الفرع',...AR_MONTHS,'المجموع']];
   S.branches.forEach(b=>{const r=bm[b.id].map(cellTotal);rows.push([b.name,...r,r.reduce((a,c)=>a+c,0)])});
   const mt=AR_MONTHS.map((_,i)=>monthAll(bm,i));rows.push(['كل الفروع',...mt,mt.reduce((a,c)=>a+c,0)]);
+  rows.push([]);rows.push(['المصاريف (بيان المخروج)']);rows.push(['الفرع',...AR_MONTHS,'المجموع']);
+  S.branches.forEach(b=>{const r=AR_MONTHS.map((_,i)=>expTotal(expOf(b.id,S.year,i)));rows.push([b.name,...r,r.reduce((a,c)=>a+c,0)])});
+  rows.push([]);rows.push(['الصافي (الدخل − المصاريف)']);rows.push(['الفرع',...AR_MONTHS,'المجموع']);
+  S.branches.forEach(b=>{const r=bm[b.id].map((c,i)=>cellTotal(c)-expTotal(expOf(b.id,S.year,i)));rows.push([b.name,...r,r.reduce((a,c)=>a+c,0)])});
+  rows.push([]);rows.push([`مصاريف ${AR_MONTHS[S.month]} ${S.year}`]);
+  S.branches.forEach(b=>{for(const it of expOf(b.id,S.year,S.month)?.items||[]) rows.push([b.name,it.name,it.amount??''])});
   rows.push([]);rows.push([`الدخل اليومي لشهر ${AR_MONTHS[S.month]} ${S.year}`]);rows.push(['التاريخ','اليوم',...S.branches.map(b=>b.name)]);
   for(let d=1;d<=dim(S.year,S.month);d++){const k=ds(S.year,S.month,d);
     rows.push([k,DOW[new Date(S.year,S.month,d).getDay()],...S.branches.map(b=>entryOf(b.id,k)?.amount??'')])}
@@ -501,7 +640,10 @@ function decodeImport(s){
     const okB=b=>/^[a-z0-9]{1,24}$/.test(b?.id)&&typeof b.name==='string'&&b.name.length<=60&&/^#[0-9a-f]{6}$/i.test(b.color||'#000000');
     const okM=m=>Array.isArray(m)&&/^[a-z0-9]{1,24}$/.test(m[0])&&/^\d{4}-\d{2}$/.test(m[1])&&typeof m[2]==='number'&&m[2]>=0;
     const okE=e=>Array.isArray(e)&&/^[a-z0-9]{1,24}$/.test(e[0])&&/^\d{4}-\d{2}-\d{2}$/.test(e[1])&&typeof e[2]==='number'&&e[2]>=0;
-    d.branches??=[];d.months??=[];d.entries??=[];
+    const okX=x=>Array.isArray(x)&&/^[a-z0-9]{1,24}$/.test(x[0])&&/^\d{4}-\d{2}$/.test(x[1])&&Array.isArray(x[2])&&x[2].length<=80&&
+      x[2].every(i=>Array.isArray(i)&&typeof i[0]==='string'&&i[0].length<=60&&(i[1]===null||(typeof i[1]==='number'&&i[1]>=0)));
+    d.branches??=[];d.months??=[];d.entries??=[];d.expenses??=[];
+    if(!Array.isArray(d.expenses)||d.expenses.length>200||!d.expenses.every(okX)) return null;
     if(d?.v!==1||![d.branches,d.months,d.entries].every(Array.isArray)||d.branches.length>20||d.months.length>500||d.entries.length>3000||
       !d.branches.every(okB)||!d.months.every(okM)||!d.entries.every(okE)) return null;
     return d;
@@ -520,19 +662,19 @@ function resolveBranch(q){
   return S.branches.find(b=>norm(b.name)===n)||S.branches.find(b=>norm(b.name).includes(n)||n.includes(norm(b.name)));
 }
 async function yearData(y){
-  if(y===S.year&&S.yearLoaded) return {entries:[...S.entries.values()],months:[...S.months.values()]};
-  if(!db) return {entries:[],months:[]};
+  if(y===S.year&&S.yearLoaded) return {entries:[...S.entries.values()],months:[...S.months.values()],expenses:[...S.expenses.values()]};
+  if(!db) return {entries:[],months:[],expenses:[]};
   if(!yearCache.has(y)){
     const get=async col=>(await fs.getDocs(fs.query(fs.collection(db,base(),col),fs.where('year','==',y)))).docs.map(d=>d.data());
-    yearCache.set(y,{entries:await get('entries'),months:await get('months')});
+    yearCache.set(y,{entries:await get('entries'),months:await get('months'),expenses:await get('expenses')});
   }
   return yearCache.get(y);
 }
 async function rangeData(from,to){
-  const ids=new Set(S.branches.map(b=>b.id)),entries=[],months=[];
-  for(let y=+from.slice(0,4);y<=+to.slice(0,4)&&y<=+from.slice(0,4)+5;y++){const d=await yearData(y);entries.push(...d.entries);months.push(...d.months)}
-  return {entries:entries.filter(e=>e.date>=from&&e.date<=to&&ids.has(e.branchId)),
-    months:months.filter(m=>m.month>=from.slice(0,7)&&m.month<=to.slice(0,7)&&ids.has(m.branchId))};
+  const ids=new Set(S.branches.map(b=>b.id)),entries=[],months=[],expenses=[];
+  for(let y=+from.slice(0,4);y<=+to.slice(0,4)&&y<=+from.slice(0,4)+5;y++){const d=await yearData(y);entries.push(...d.entries);months.push(...d.months);expenses.push(...(d.expenses||[]))}
+  const inMonths=m=>m.month>=from.slice(0,7)&&m.month<=to.slice(0,7)&&ids.has(m.branchId);
+  return {entries:entries.filter(e=>e.date>=from&&e.date<=to&&ids.has(e.branchId)),months:months.filter(inMonths),expenses:expenses.filter(inMonths)};
 }
 function eachDay(from,to,fn){
   const d=new Date(from+'T00:00'),end=new Date(to+'T00:00');
@@ -581,6 +723,24 @@ const TOOLS={
     const days=[];eachDay(from,to,(d,w)=>{if(d in by) days.push({date:d,weekday:DOW[w],total:r2(by[d])})});
     return {branch:b?.name||'كل الفروع',days:days.slice(-120),truncated:days.length>120};
   },
+  async get_expenses({from_month,to_month,branch,item}){
+    const okM=v=>/^\d{4}-\d{2}$/.test(v||'');
+    if(!okM(from_month)||!okM(to_month)) return {error:'الأشهر لازم تكون بصيغة YYYY-MM'};
+    const b=resolveBranch(branch);if(b===undefined) return branchErr(branch);
+    const last=to_month.split('-').map(Number),to=ds(last[0],last[1]-1,dim(last[0],last[1]-1));
+    const {entries,months,expenses}=await rangeData(`${from_month}-01`,to),q=norm(item||''),per={};
+    // Singular and plural spellings on the sheets (راتب / رواتب, إيجار / اجار) count as the same item
+    const alts=/^(ال)?(راتب|رواتب)$/.test(q)?['راتب','رواتب']:q.includes('ايجار')?[q,q.replace('ايجار','اجار')]:[q];
+    for(const x of S.branches){if(b&&x.id!==b.id) continue;per[x.id]={name:x.name,income:0,expenses:0,items:{}}}
+    const daily={};for(const e of entries) if(per[e.branchId]){const k=e.branchId+'|'+e.date.slice(0,7);daily[k]=(daily[k]||0)+e.amount}
+    for(const [k,v] of Object.entries(daily)) per[k.split('|')[0]].income+=v;
+    for(const m of months) if(per[m.branchId]&&!(m.branchId+'|'+m.month in daily)) per[m.branchId].income+=m.total;
+    for(const x of expenses){const p=per[x.branchId];if(!p) continue;
+      for(const it of x.items||[]){if(typeof it.amount!=='number'||(q&&!alts.some(w=>norm(it.name).includes(w)))) continue;p.expenses+=it.amount;p.items[it.name]=r2((p.items[it.name]||0)+it.amount)}}
+    const out=Object.values(per).map(p=>({branch:p.name,income:r2(p.income),expenses:r2(p.expenses),net:r2(p.income-p.expenses),items:p.items}));
+    const sum=k=>r2(out.reduce((s,o)=>s+o[k],0));
+    return {from_month,to_month,item_filter:item||null,currency:'ريال سعودي',per_branch:out,total_income:sum('income'),total_expenses:sum('expenses'),total_net:item?null:sum('net')};
+  },
   async find_missing_days({from,to,branch}){
     if(!isDate(from)||!isDate(to)) return rangeErr();
     const b=resolveBranch(branch);if(b===undefined) return branchErr(branch);
@@ -609,6 +769,9 @@ function aiDecls(){
       parameters:Schema.object({properties:{date:date('اليوم')}})},
     {name:'get_daily',description:'الدخل يوم بيوم لفترة، عشان أعلى يوم وأقل يوم والمقارنات',
       parameters:Schema.object({properties:{from:date('أول يوم'),to:date('آخر يوم'),branch},optionalProperties:['branch']})},
+    {name:'get_expenses',description:'مصاريف الفروع (بيان المخروج) والدخل والصافي (الدخل ناقص المصاريف) لأشهر معيّنة، ومجموع كل بند. يقدر يفلتر على بند مثل الرواتب أو الإيجار',
+      parameters:Schema.object({properties:{from_month:Schema.string({description:'أول شهر بصيغة YYYY-MM'}),to_month:Schema.string({description:'آخر شهر بصيغة YYYY-MM'}),branch,
+        item:Schema.string({description:'جزء من اسم البند، مثل راتب أو إيجار أو كهرباء. اتركه فاضي لكل البنود'})},optionalProperties:['branch','item']})},
     {name:'find_missing_days',description:'الأيام اللي ما تسجّل فيها دخل فرع أو أكثر (لين اليوم)',
       parameters:Schema.object({properties:{from:date('أول يوم'),to:date('آخر يوم'),branch},optionalProperties:['branch']})},
   ];
@@ -622,6 +785,7 @@ function aiSystem(){
 القواعد:
 - أي رقم لازم يجي من الأدوات. لا تخمّن ولا تخترع أرقام، وخذ المجاميع من الأداة كما هي.
 - إذا اسم الفرع مو واضح استخدم list_branches. المستخدم ممكن يذكر الفرع برقمه بس (مثل 43).
+- المصاريف أو المخروج أو الصافي أو الفارق أو الربح بعد المصاريف تعني get_expenses.
 - "يوم ناقص" أو "ما عبّيته" أو "نسيت أسجّل" تعني find_missing_days.
 - جاوب باللهجة الخليجية، باختصار ووضوح، والأرقام بفواصل الآلاف ومعها "ر.س". استخدم نقاط قصيرة إذا فيه أكثر من فرع.
 - إذا السؤال مو عن الدفتر، قل بلطف إنك مختص بأرقام الدفتر.`;
@@ -671,6 +835,7 @@ function showImport(s){
   for(const [bid,date,v] of importData.entries){const g=groups[bid+'|'+date.slice(0,7)]??={bid,month:date.slice(0,7),days:0,sum:0};g.days++;g.sum+=v}
   const row=(name,sub,val)=>`<div class="e-row" style="padding:0 16px;min-height:60px"><div style="flex:1;min-width:0"><div style="font-size:17px">${esc(name)}</div><div style="font-size:13px;color:var(--sec)">${sub}</div></div><b class="tnum" style="font-size:17px">${fmt(val)}</b></div>`;
   const daily=Object.values(groups).map(g=>row(names[g.bid]||g.bid,`${AR_MONTHS[+g.month.slice(5)-1]} ${g.month.slice(0,4)} · ${g.days} يوم`,g.sum)).join('');
+  const expRows=importData.expenses.map(([bid,month,items])=>row(names[bid]||bid,`${AR_MONTHS[+month.slice(5)-1]} ${month.slice(0,4)} · ${items.length} بند`,items.reduce((a,i)=>a+(i[1]||0),0))).join('');
   const paper=importData.months.map(m=>row(names[m[0]]||m[0],`${AR_MONTHS[+m[1].slice(5)-1]} ${m[1].slice(0,4)}`,m[2])).join('');
   document.body.style.overflow='hidden';
   $('overlay').innerHTML=`<div class="scrim" data-close-sheet></div><section class="sheet" aria-label="استيراد البيانات"><div class="grabber" aria-hidden="true"></div>
@@ -679,6 +844,7 @@ function showImport(s){
       ${importData.branches.length?`<p class="cap">فروع: ${importData.branches.map(b=>esc(b.name)).join('، ')}</p>`:''}
       ${daily?`<p class="cap">الدخل اليومي</p><div class="list">${daily}</div>`:''}
       ${paper?`<p class="cap gap">مجاميع أشهر من الأوراق</p><div class="list">${paper}</div>`:''}
+      ${expRows?`<p class="cap gap">المصاريف (بيان المخروج)</p><div class="list">${expRows}</div>`:''}
       <button class="l-btn" id="importGo" type="button" style="margin-top:24px;width:100%">استيراد</button>
     </div></section>`;
   $('importGo').onclick=async()=>{
@@ -691,6 +857,9 @@ function showImport(s){
       }
       for(const [bid,month,total] of importData.months)
         ops.push([fs.doc(db,base(),'months',`${bid}_${month}`),{branchId:bid,month,year:+month.slice(0,4),total,source:'paper'}]);
+      for(const [bid,month,items] of importData.expenses)
+        ops.push([fs.doc(db,base(),'expenses',`${bid}_${month}`),{branchId:bid,month,year:+month.slice(0,4),source:'paper',updatedAt:at,
+          items:items.map(([name,amount,fixed])=>({id:newId(),name,amount:amount??null,fixed:!!fixed}))}]);
       for(const [bid,date,amount] of importData.entries)
         ops.push([fs.doc(db,base(),'entries',`${bid}_${date}`),{branchId:bid,date,year:+date.slice(0,4),month:date.slice(0,7),amount,updatedAt:at}]);
       for(let i=0;i<ops.length;i+=400){const b=fs.writeBatch(db);ops.slice(i,i+400).forEach(([r,d])=>b.set(r,d));await b.commit()}
@@ -822,7 +991,7 @@ if(!firebaseConfig){
   doLogout=()=>signOut(auth);
   onAuthStateChanged(auth,u=>{
     if(u){uid=u.uid;yearCache.clear();aiChat=null;showLogin(false);startLive();route()}
-    else{uid=null;stopLive();S.branches=[];S.entries=new Map();S.months=new Map();S.mode='loading';S.rendered='';showLogin(true)}
+    else{uid=null;stopLive();S.branches=[];S.entries=new Map();S.months=new Map();S.expenses=new Map();expDraft=null;S.mode='loading';S.rendered='';showLogin(true)}
     hideSplash();
   });
   $('loginForm').addEventListener('submit',async e=>{
