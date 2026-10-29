@@ -2,7 +2,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.19.0/fireba
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
 import * as fs from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 import { getAI, getGenerativeModel, GoogleAIBackend, Schema } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-ai.js';
-import { initializeAppCheck, ReCaptchaV3Provider } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app-check.js';
+import { initializeAppCheck, ReCaptchaV3Provider, getToken } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app-check.js';
 import { firebaseConfig, appCheckSiteKey } from './config.js';
 
 const USER_NAME='أحمد';
@@ -16,7 +16,7 @@ const CUR='ر.س';
 const now=new Date();
 const S={view:'home',branchId:null,year:now.getFullYear(),month:now.getMonth(),branches:[],entries:new Map(),months:new Map(),
   yearLoaded:false,mode:'loading',rendered:''};
-let db=null,uid=null,unsubYear=[],unsubs=[];
+let db=null,uid=null,unsubYear=[],unsubs=[],appCheck=null;
 
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -715,7 +715,10 @@ async function aiAsk(text){
       /quota|\b429\b|RESOURCE_EXHAUSTED/i.test(m)?'وصلنا للحد المجاني للمساعد حالياً. جرّب بعد شوي.':
       /App Check/i.test(m)?'المساعد ينتظر تفعيل حماية App Check. انتظر دقايق وجرّب مرة ثانية.':
       code==='fetch-error'&&!navigator.onLine?'ما فيه اتصال بالإنترنت.':'صار خطأ في الاتصال بالمساعد. جرّب مرة ثانية، وإذا تكرر صوّر الرسالة.';
-    html=`${msg}<div class="ai-err">${esc(`${code} ${m}`.trim().slice(0,220))}</div>`;
+    // When App Check rejects the request, ask App Check itself why it could not issue a valid token
+    let why='';
+    if(/App Check/i.test(m)&&appCheck){try{await getToken(appCheck,true);why='App Check token OK'}catch(x){why=`${x?.code||''} ${x?.message||x}`}}
+    html=`${msg}<div class="ai-err">${esc(`${code} ${m}`.trim().slice(0,220))}${why?`<br>${esc(why.trim().slice(0,260))}`:''}</div>`;
     aiChat=null;
   }finally{wait.remove();if(html)aiMsg('bot',html);aiBusy=false;sendState()}
 }
@@ -768,7 +771,7 @@ if(!firebaseConfig){
 }else{
   const app=initializeApp(firebaseConfig);
   // App Check proves requests come from this site; Firebase requires it for the assistant (AI Logic)
-  if(appCheckSiteKey) initializeAppCheck(app,{provider:new ReCaptchaV3Provider(appCheckSiteKey),isTokenAutoRefreshEnabled:true});
+  if(appCheckSiteKey) appCheck=initializeAppCheck(app,{provider:new ReCaptchaV3Provider(appCheckSiteKey),isTokenAutoRefreshEnabled:true});
   const auth=getAuth(app);
   initAI(app);
   db=fs.initializeFirestore(app,{localCache:fs.persistentLocalCache({tabManager:fs.persistentMultipleTabManager()})});
