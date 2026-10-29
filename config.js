@@ -9,4 +9,4 @@ export const firebaseConfig = {
 };
 
 // مفتاح الموقع (Site key) من reCAPTCHA v3، يستخدمه App Check. مو سري.
-export const appCheckSiteKey = null;
+export const appCheckSiteKey = "6Lf4RAcuAAAAAGEfj5YwOjQlqW62ftTNopq_a0RI";
