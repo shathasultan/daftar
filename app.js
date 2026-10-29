@@ -2,7 +2,8 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.19.0/fireba
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
 import * as fs from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 import { getAI, getGenerativeModel, GoogleAIBackend, Schema } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-ai.js';
-import { firebaseConfig } from './config.js';
+import { initializeAppCheck, ReCaptchaV3Provider } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app-check.js';
+import { firebaseConfig, appCheckSiteKey } from './config.js';
 
 const USER_NAME='أحمد';
 const AR_MONTHS=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
@@ -116,7 +117,7 @@ function renderHome(){
     <section class="section"><div class="list icons">
       <a class="row tap" href="#report" style="--c:#8e8e93"><span class="ico">${IC.chart}</span><span class="row-main"><span class="row-title">التقرير السنوي</span><span class="row-sub">مجموع كل شهر لكل فرع في ${S.year}</span></span><span class="chev" aria-hidden="true">‹</span></a>
       ${db?`<button class="row tap" data-act="logout" style="--c:#8e8e93"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h3a2 2 0 012 2v12a2 2 0 01-2 2h-3M10 17l-5-5 5-5M5 12h11"/></svg></span><span class="row-main"><span class="row-title">تسجيل الخروج</span></span></button>`:''}
-    </div></section>`;
+    </div>${appCheckSiteKey?'<div class="sec-foot">الموقع محمي بـ reCAPTCHA من Google، وتنطبق <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">سياسة الخصوصية</a> و<a href="https://policies.google.com/terms" target="_blank" rel="noopener">شروط الخدمة</a>.</div>':''}</section>`;
 }
 
 function dayRows(y,m){
@@ -604,6 +605,8 @@ if(!firebaseConfig){
   subscribeYear();route();
 }else{
   const app=initializeApp(firebaseConfig);
+  // App Check proves requests come from this site; Firebase requires it for the assistant (AI Logic)
+  if(appCheckSiteKey) initializeAppCheck(app,{provider:new ReCaptchaV3Provider(appCheckSiteKey),isTokenAutoRefreshEnabled:true});
   const auth=getAuth(app);
   initAI(app);
   db=fs.initializeFirestore(app,{localCache:fs.persistentLocalCache({tabManager:fs.persistentMultipleTabManager()})});

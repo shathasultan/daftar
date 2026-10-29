@@ -7,3 +7,6 @@ export const firebaseConfig = {
   messagingSenderId: "1091912845143",
   appId: "1:1091912845143:web:2cd4ccd3ddc4a1cd072012"
 };
+
+// مفتاح الموقع (Site key) من reCAPTCHA v3، يستخدمه App Check. مو سري.
+export const appCheckSiteKey = null;
