@@ -8,5 +8,5 @@ export const firebaseConfig = {
   appId: "1:1091912845143:web:2cd4ccd3ddc4a1cd072012"
 };
 
-// مفتاح الموقع (Site key) من reCAPTCHA v3، يستخدمه App Check. مو سري.
+// مفتاح الموقع (Site key) من Fraud Defense (reCAPTCHA Enterprise)، يستخدمه App Check. مو سري.
 export const appCheckSiteKey = "6Lf4RAcuAAAAAGEfj5YwOjQlqW62ftTNopq_a0RI";

@@ -2,7 +2,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.19.0/fireba
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
 import * as fs from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 import { getAI, getGenerativeModel, GoogleAIBackend, Schema } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-ai.js';
-import { initializeAppCheck, ReCaptchaV3Provider, getToken } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app-check.js';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider, getToken } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app-check.js';
 import { firebaseConfig, appCheckSiteKey } from './config.js';
 
 const USER_NAME='أحمد';
@@ -771,7 +771,7 @@ if(!firebaseConfig){
 }else{
   const app=initializeApp(firebaseConfig);
   // App Check proves requests come from this site; Firebase requires it for the assistant (AI Logic)
-  if(appCheckSiteKey) appCheck=initializeAppCheck(app,{provider:new ReCaptchaV3Provider(appCheckSiteKey),isTokenAutoRefreshEnabled:true});
+  if(appCheckSiteKey) appCheck=initializeAppCheck(app,{provider:new ReCaptchaEnterpriseProvider(appCheckSiteKey),isTokenAutoRefreshEnabled:true});
   const auth=getAuth(app);
   initAI(app);
   db=fs.initializeFirestore(app,{localCache:fs.persistentLocalCache({tabManager:fs.persistentMultipleTabManager()})});
