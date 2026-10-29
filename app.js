@@ -525,10 +525,24 @@ function aiSystem(){
 - جاوب باللهجة الخليجية، باختصار ووضوح، والأرقام بفواصل الآلاف ومعها "ر.س". استخدم نقاط قصيرة إذا فيه أكثر من فرع.
 - إذا السؤال مو عن الدفتر، قل بلطف إنك مختص بأرقام الدفتر.`;
 }
-let aiModel=null,aiChat=null,aiBusy=false;
-function initAI(app){
-  try{aiModel=getGenerativeModel(getAI(app,{backend:new GoogleAIBackend()}),
-    {model:'gemini-2.5-flash',systemInstruction:aiSystem(),tools:[{functionDeclarations:aiDecls()}]})}catch(e){aiModel=null}
+// Newest model first; if Google has retired one, the next is tried and remembered for the visit
+const AI_MODELS=['gemini-flash-latest','gemini-3.6-flash','gemini-2.5-flash'];
+let aiCtx=null,aiModelIdx=0,aiModel=null,aiChat=null,aiBusy=false;
+function initAI(app){try{aiCtx=getAI(app,{backend:new GoogleAIBackend()});makeModel()}catch(e){aiCtx=null}}
+function makeModel(){
+  aiModel=aiCtx?getGenerativeModel(aiCtx,{model:AI_MODELS[aiModelIdx],systemInstruction:aiSystem(),tools:[{functionDeclarations:aiDecls()}]}):null;
+  aiChat=null;
+}
+const modelGone=m=>/\b404\b|not found|is not supported|no longer available|deprecated|retired/i.test(m);
+async function aiRun(text){
+  aiChat??=aiModel.startChat();
+  let r=await aiChat.sendMessage(text);
+  for(let i=0;i<6;i++){
+    const calls=r.response.functionCalls();if(!calls?.length) break;
+    const parts=await Promise.all(calls.map(async c=>({functionResponse:{name:c.name,response:await runTool(c.name,c.args)}})));
+    r=await aiChat.sendMessage(parts);
+  }
+  return r.response.text();
 }
 function mdLite(s){
   return esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').split('\n').map(l=>/^\s*[-*•]\s+/.test(l)?`<li>${l.replace(/^\s*[-*•]\s+/,'')}</li>`:l)
@@ -544,18 +558,18 @@ async function aiAsk(text){
   aiMsg('me',esc(text));const wait=aiMsg('bot','<span class="ai-dots"><i></i><i></i><i></i></span>');
   try{
     if(!aiModel){wait.innerHTML='المساعد يشتغل بعد ما نربط الموقع بـ Firebase ونفعّل Gemini (AI Logic).';return}
-    aiChat??=aiModel.startChat();
-    let r=await aiChat.sendMessage(text);
-    for(let i=0;i<6;i++){
-      const calls=r.response.functionCalls();if(!calls?.length) break;
-      const parts=await Promise.all(calls.map(async c=>({functionResponse:{name:c.name,response:await runTool(c.name,c.args)}})));
-      r=await aiChat.sendMessage(parts);
+    let answer;
+    for(;;){
+      try{answer=await aiRun(text);break}
+      catch(e){if(aiModelIdx<AI_MODELS.length-1&&modelGone(String(e?.message||e))){aiModelIdx++;makeModel();continue}throw e}
     }
-    wait.innerHTML=mdLite(r.response.text()||'ما قدرت أطلع جواب. جرّب تصيغ السؤال بطريقة ثانية.');
+    wait.innerHTML=mdLite(answer||'ما قدرت أطلع جواب. جرّب تصيغ السؤال بطريقة ثانية.');
   }catch(e){
-    const m=String(e?.message||e);
-    wait.innerHTML=/api-not-enabled|not been used|disabled|AI Logic/i.test(m)?'لازم تفعّل <b>AI Logic</b> في Firebase عشان يشتغل المساعد.':
-      /quota|429|RESOURCE_EXHAUSTED/i.test(m)?'وصلنا للحد المجاني للمساعد حالياً. جرّب بعد شوي.':'صار خطأ في الاتصال بالمساعد. تأكد من الإنترنت وجرّب مرة ثانية.';
+    const m=String(e?.message||e),code=e?.code||'';
+    const msg=code==='api-not-enabled'||/api-not-enabled|not been used|has not been enabled|AI Logic/i.test(m)?'لازم تفعّل <b>AI Logic</b> في Firebase عشان يشتغل المساعد (Gemini Developer API).':
+      /quota|\b429\b|RESOURCE_EXHAUSTED/i.test(m)?'وصلنا للحد المجاني للمساعد حالياً. جرّب بعد شوي.':
+      code==='fetch-error'&&!navigator.onLine?'ما فيه اتصال بالإنترنت.':'صار خطأ في الاتصال بالمساعد. جرّب مرة ثانية، وإذا تكرر صوّر الرسالة.';
+    wait.innerHTML=`${msg}<div class="ai-err">${esc(`${code} ${m}`.trim().slice(0,220))}</div>`;
     aiChat=null;
   }finally{aiBusy=false;$('aiSend').disabled=false;$('aiMsgs').scrollTop=$('aiMsgs').scrollHeight}
 }
