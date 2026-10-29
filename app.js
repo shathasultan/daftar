@@ -627,17 +627,20 @@ function aiSystem(){
 - إذا السؤال مو عن الدفتر، قل بلطف إنك مختص بأرقام الدفتر.`;
 }
 // Newest model first; if Google has retired one, the next is tried and remembered for the visit
-const AI_MODELS=['gemini-flash-latest','gemini-3.6-flash','gemini-2.5-flash'];
+// Light thinking keeps replies quick: adding up figures needs no deep reasoning. 2.5 models take a budget instead of a level.
+const AI_MODELS=[{model:'gemini-flash-latest',thinkingConfig:{thinkingLevel:'LOW'}},{model:'gemini-3.6-flash',thinkingConfig:{thinkingLevel:'LOW'}},{model:'gemini-2.5-flash',thinkingConfig:{thinkingBudget:0}}];
 let aiCtx=null,aiModelIdx=0,aiModel=null,aiChat=null,aiBusy=false;
 function initAI(app){try{aiCtx=getAI(app,{backend:new GoogleAIBackend()});makeModel()}catch(e){aiCtx=null}}
 function makeModel(){
-  aiModel=aiCtx?getGenerativeModel(aiCtx,{model:AI_MODELS[aiModelIdx],systemInstruction:aiSystem(),tools:[{functionDeclarations:aiDecls()}]}):null;
+  const {model,thinkingConfig}=AI_MODELS[aiModelIdx];
+  aiModel=aiCtx?getGenerativeModel(aiCtx,{model,systemInstruction:aiSystem(),tools:[{functionDeclarations:aiDecls()}],generationConfig:{thinkingConfig}}):null;
   aiChat=null;
 }
-const modelGone=m=>/\b404\b|not found|is not supported|no longer available|deprecated|retired/i.test(m);
+const modelGone=m=>/\b404\b|not found|is not supported|no longer available|deprecated|retired|thinking/i.test(m);
 async function aiRun(text){
   aiChat??=aiModel.startChat();
-  let r=await aiChat.sendMessage(text);
+  // The branch names travel with each question so the model can usually answer in one tool round
+  let r=await aiChat.sendMessage(`[الفروع: ${S.branches.map(b=>b.name).join('، ')} · اليوم ${todayStr}]\n${text}`);
   for(let i=0;i<6;i++){
     const calls=r.response.functionCalls();if(!calls?.length) break;
     const parts=await Promise.all(calls.map(async c=>({functionResponse:{name:c.name,response:await runTool(c.name,c.args)}})));
@@ -712,7 +715,7 @@ async function aiAsk(text){
     }
     let answer;
     for(;;){
-      try{answer=await Promise.race([aiRun(text),new Promise((_,no)=>setTimeout(()=>no(Object.assign(new Error('timeout after 45s'),{code:'timeout'})),45000))]);break}
+      try{answer=await Promise.race([aiRun(text),new Promise((_,no)=>setTimeout(()=>no(Object.assign(new Error(`timeout after 60s (${AI_MODELS[aiModelIdx].model})`),{code:'timeout'})),60000))]);break}
       catch(e){if(aiModelIdx<AI_MODELS.length-1&&modelGone(String(e?.message||e))){aiModelIdx++;makeModel();continue}throw e}
     }
     html=mdLite(answer||'ما قدرت أطلع جواب. جرّب تصيغ السؤال بطريقة ثانية.');
