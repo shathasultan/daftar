@@ -43,7 +43,7 @@ export function openPrintReport(input){
  root.querySelector('[data-share-pdf]').onclick=async()=>{
    if(!pdfFile)return;
    const button=root.querySelector('[data-share-pdf]');button.disabled=true;
-   await sharePdfFile(pdfFile,{nav:navigator,title:document.title,download,notify:message=>{if(!closed)status.textContent=message}});
+   await sharePdfFile(pdfFile,{nav:navigator,download,notify:message=>{if(!closed)status.textContent=message}});
    if(!closed)button.disabled=false;
  };
  const prepare=async()=>{
@@ -52,7 +52,7 @@ export function openPrintReport(input){
   try{
    const {buildMonthlyPdf}=await import('./pdf-report.js');
    if(closed)return;
-   const blob=buildMonthlyPdf(input);pdfFile=new File([blob],`دفتر-${input.year}-${String(input.month+1).padStart(2,'0')}.pdf`,{type:'application/pdf'});pdfUrl=URL.createObjectURL(pdfFile);
+   const blob=buildMonthlyPdf(input);pdfFile=new File([blob],`Daftar-${input.year}-${String(input.month+1).padStart(2,'0')}.pdf`,{type:'application/pdf'});pdfUrl=URL.createObjectURL(pdfFile);
    root.querySelectorAll('[data-print-now],[data-share-pdf],[data-download-pdf]').forEach(b=>b.disabled=false);
    status.textContent='ملف PDF جاهز للتنزيل والمشاركة والطباعة.';
   }catch(err){console.error(err);if(!closed){status.textContent='تعذّر تجهيز PDF. أعد المحاولة؛ وإذا كنت دون اتصال افتح التقرير مرة بعد الاتصال.';root.querySelector('[data-pdf-retry]').hidden=false}}
