@@ -423,3 +423,46 @@ h1,h2,p{margin:0}
 }
 .grecaptcha-badge{visibility:hidden}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+
+/* bt:ec52ad88d4b0903b | Monthly report preview and A4 printing */
+.print-export{width:100%;min-height:48px;margin:-8px 0 20px;padding:12px;border:1px solid var(--blue);border-radius:14px;color:var(--blue);font-size:16px;font-weight:600;line-height:1.5}
+.print-export:disabled{opacity:.55}
+body.report-open{overflow:hidden}
+#monthlyPrintReport{position:fixed;inset:0;z-index:1000;overflow:auto;background:#e9eef4;color:#172d45;font:15px/1.6 Arial,sans-serif;text-align:right;color-scheme:light;overscroll-behavior:contain}
+#monthlyPrintReport *{box-sizing:border-box}
+#monthlyPrintReport .report-toolbar{position:sticky;top:0;z-index:1;display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:#183653;color:#fff;padding:14px max(16px,env(safe-area-inset-right))}
+#monthlyPrintReport button{font:700 15px/1.5 Arial,sans-serif;padding:10px 16px;border-radius:8px;background:#fff;color:#183653;cursor:pointer}
+#monthlyPrintReport button:focus-visible{outline:3px solid #edb735;outline-offset:3px}
+#monthlyPrintReport .report-toolbar span{font-size:13px;line-height:1.6}
+#monthlyPrintReport .report-sheet{width:100%;max-width:210mm;margin:20px auto;padding:24px;background:#fff;border:1px solid #d6dfe9;border-radius:10px}
+#monthlyPrintReport h1{font:700 26px/1.5 Arial,sans-serif;margin:6px 0 12px;overflow-wrap:anywhere}
+#monthlyPrintReport h2{font:700 19px/1.5 Arial,sans-serif;margin:22px 0 10px;break-after:avoid}
+#monthlyPrintReport p{margin:8px 0;line-height:1.6}
+#monthlyPrintReport header>span,#monthlyPrintReport .report-note{color:#53647a;font-size:13px;line-height:1.6}
+#monthlyPrintReport .report-table{width:100%;margin:12px 0}
+#monthlyPrintReport table{width:100%;border-collapse:collapse;table-layout:fixed;direction:rtl;font-size:14px;line-height:1.6}
+#monthlyPrintReport th,#monthlyPrintReport td{padding:10px 8px;border:1px solid #b5c2d1;text-align:right;vertical-align:middle;overflow-wrap:anywhere;line-height:1.6}
+#monthlyPrintReport th{background:#183653;color:#fff;font-weight:700}
+#monthlyPrintReport tbody tr:nth-child(even){background:#f0f4f8}
+#monthlyPrintReport .report-last{font-weight:700;background:#e5edf5}
+#monthlyPrintReport .report-number{display:inline-block;direction:ltr;unicode-bidi:isolate;font-variant-numeric:tabular-nums;white-space:nowrap}
+@media(max-width:480px){
+ #monthlyPrintReport .report-sheet{padding:18px 12px;margin:12px auto;border-radius:0}
+ #monthlyPrintReport table{font-size:12px}
+ #monthlyPrintReport td,#monthlyPrintReport th{padding:9px 4px}
+ #monthlyPrintReport h1{font-size:23px}
+}
+@media print{
+ @page{size:A4 portrait;margin:14mm 12mm}
+ body.report-open{overflow:visible!important;background:#fff!important}
+ body.report-open> :not(#monthlyPrintReport){display:none!important}
+ #monthlyPrintReport{position:static;overflow:visible;background:#fff;font-size:11pt}
+ #monthlyPrintReport .report-toolbar{display:none!important}
+ #monthlyPrintReport .report-sheet{max-width:none;width:100%;margin:0;padding:0;border:0;border-radius:0}
+ #monthlyPrintReport .report-branch{break-before:page}
+ #monthlyPrintReport table{font-size:10.5pt}
+ #monthlyPrintReport th,#monthlyPrintReport td{padding:7px 8px;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+ #monthlyPrintReport thead{display:table-header-group}
+ #monthlyPrintReport tr{break-inside:avoid}
+ #monthlyPrintReport h1,#monthlyPrintReport h2,#monthlyPrintReport header{break-after:avoid}
+}

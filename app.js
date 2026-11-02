@@ -1,3 +1,4 @@
+import { openPrintReport } from './print-report.js';
 import { buildMonthlyReport } from './word-report.js';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
@@ -611,14 +612,14 @@ document.addEventListener('click',e=>{
   const a=t.dataset.act;
   if(a==='edit') openEdit();
   if(a==='ai') openAI();
-  if(a==='word') exportWord(t);
+  if(a==='word'||a==='print-report') exportWord(t,a==='print-report');
   if(a==='logout') doLogout?.();
 });
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeOverlay();closeAI()}});
 
-function wordButton(){return `<button class="word-export" type="button" data-act="word">تنزيل تقرير الشهر بصيغة Word</button>`}
+function wordButton(){return `<button class="word-export" type="button" data-act="word">تنزيل تقرير الشهر بصيغة Word</button><button class="print-export" type="button" data-act="print-report">معاينة وطباعة تقرير الشهر</button>`}
 let exportingWord=false;
-async function exportWord(button){
+async function exportWord(button,printing=false){
   if(exportingWord) return;
   if(!S.yearLoaded||reportCollections.size!==3){toast('انتظر اكتمال تحميل بيانات السنة',true);return}
   exportingWord=true;button.disabled=true;
@@ -637,7 +638,9 @@ async function exportWord(button){
     const expenses=[...S.expenses.values()].map(e=>({...e,items:e.items.map(i=>({...i}))}));
     if(expDraft){const d=expDraft,key=ym(d.y,d.m),i=expenses.findIndex(e=>e.branchId===d.bid&&e.month===key);if(i>=0)expenses.splice(i,1);expenses.push({branchId:d.bid,month:key,items:d.items.map(i=>({...i}))})}
     const branches=S.view==='branch'?S.branches.filter(b=>b.id===S.branchId):S.branches;
-    const blob=await buildMonthlyReport({year,month:selected,branches:branches.map(b=>({...b})),entries,totals:[...S.months.values()],expenses});
+    const input={year,month:selected,branches:branches.map(b=>({...b})),entries,totals:[...S.months.values()],expenses};
+    if(printing){openPrintReport(input);return}
+    const blob=await buildMonthlyReport(input);
     const a=document.createElement('a'),url=URL.createObjectURL(blob);a.href=url;a.download=`دفتر-${year}-${pad(selected+1)}.docx`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
     toast('تم تجهيز تقرير Word');
   }catch(e){console.error(e);toast(e.message||'تعذّر إنشاء تقرير Word، حاول مرة أخرى',true)}
