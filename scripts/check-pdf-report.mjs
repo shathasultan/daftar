@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {buildMonthlyPdf} from '../pdf-report.js';
+import {sharePdfFile} from '../pdf-share.js';
+const input={year:2026,month:9,branches:[{id:'a',name:'فرع تجريبي'}],entries:[{branchId:'a',date:'2026-10-01',amount:100}],totals:[],expenses:[{branchId:'a',month:'2026-10',items:[{name:'راتب الموظف',amount:200},{name:'النت',amount:0},{name:'بند دون مبلغ',amount:null}]}]};
+const blob=buildMonthlyPdf(input);assert.equal(blob.type,'application/pdf');
+const bytes=new Uint8Array(await blob.arrayBuffer());assert.equal(new TextDecoder().decode(bytes.slice(0,5)),'%PDF-');assert(bytes.length>10000);
+const file=new File([blob],'report.pdf',{type:'application/pdf'});let downloaded=0,shared=0,notes=[];
+const base={title:'تقرير تجريبي',download:()=>downloaded++,notify:s=>notes.push(s)};
+assert.equal(await sharePdfFile(file,{...base,nav:{}}),'download');assert.equal(downloaded,1);
+assert.equal(await sharePdfFile(file,{...base,nav:{canShare:({files})=>files[0]===file,share:({files})=>{assert.equal(files[0].type,'application/pdf');shared++;return Promise.resolve()}}}),'shared');assert.equal(shared,1);
+assert.equal(await sharePdfFile(file,{...base,nav:{canShare:()=>true,share:()=>Promise.reject({name:'AbortError'})}}),'cancelled');assert.equal(downloaded,1);
+assert.equal(await sharePdfFile(file,{...base,nav:{canShare:()=>true,share:()=>Promise.reject({name:'NotAllowedError'})}}),'failed');assert.equal(downloaded,1);
+console.log('PASS PDF signature, embedded font, file sharing, unsupported fallback, cancellation and share denial');
