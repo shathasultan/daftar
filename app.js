@@ -1,3 +1,4 @@
+import { buildMonthlyReport } from './word-report.js';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
 import * as fs from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
@@ -213,7 +214,7 @@ function renderHome(){
       <div class="dots" role="img" aria-label="أيام ${AR_MONTHS[m]}: ${c.days} مسجّلة${miss?` و${miss} ناقصة`:''}">${dots}</div></div></a>`;
   }).join('');
   const yearTotal=AR_MONTHS.reduce((s,_,i)=>s+monthAll(bm,i),0),expAll=expMonthAll(m);
-  $('page').innerHTML=`${head}${monthSwitch()}
+  $('page').innerHTML=`${head}${monthSwitch()}${wordButton()}
     <section class="card total" aria-label="مجموع كل الفروع">
       <div class="total-top"><span class="k-label">مجموع كل الفروع · ${AR_MONTHS[m]} ${y}</span>${delta}</div>
       <div class="big"><span class="n tnum">${fmt(total)}</span><span class="cur">${CUR}</span></div>
@@ -253,7 +254,7 @@ function renderBranch(){
   const income=S.tab!=='expenses';
   $('page').innerHTML=`<header class="head" style="display:block"><div class="b-head"><div class="b-icon tnum" style="background:${grad(b)}">${esc(badge(b))}</div><h1 class="title">${esc(b.name)}</h1></div>
     <p class="subline">${income?'الدخل اليومي':'المصاريف'} · ${mon} ${y}</p></header>
-    ${monthSwitch()}
+    ${monthSwitch()}${wordButton()}
     <div class="seg2" role="tablist" aria-label="الدخل والمصاريف"><button type="button" role="tab" data-tab="income" aria-selected="${income}" class="${income?'on':''}">الدخل</button><button type="button" role="tab" data-tab="expenses" aria-selected="${!income}" class="${income?'':'on'}">المصاريف</button></div>
     ${income?`<div id="paperNote">${paper}</div><div id="days">${h}</div>`:`<div id="exp"></div>`}`;
   $('foot').hidden=false;
@@ -481,7 +482,7 @@ function renderReport(){
     <div class="seg2" role="tablist" aria-label="نوع الأرقام" style="margin:0 0 10px">${[['income','الدخل'],['expenses','المصاريف'],['net','الصافي']].map(([k,l])=>`<button type="button" role="tab" data-metric="${k}" aria-selected="${met===k}" class="${met===k?'on':''}">${l}</button>`).join('')}</div>
     <div class="card tbl"><table><thead>${head}</thead><tbody>${body}${all}</tbody></table></div>
     <p class="note-text">اسحب الجدول يمين ويسار تشوف كل الأشهر.${paperMonths.length?` أرقام ${paperMonths.map(i=>AR_MONTHS[i]).join(' و')} من الدفتر الورقي.`:''}</p>
-    <button class="excel" type="button" data-act="csv"><span class="xl" aria-hidden="true"><span style="background:#fff"></span><span style="background:#fff"></span><span style="background:#fff"></span><span></span><span></span><span style="background:#30D158"></span><span></span><span style="background:#FF9F0A"></span><span></span></span><span>تنزيل التقرير كملف Excel</span></button>`:''}`;
+    <div class="word-month"><label for="reportMonth">شهر تقرير Word</label><select id="reportMonth">${AR_MONTHS.map((name,i)=>`<option value="${i}"${i===S.month?' selected':''}>${name}</option>`).join('')}</select></div>${wordButton()}`:''}`;
 }
 
 /* ---------- edit branches ---------- */
@@ -572,14 +573,16 @@ async function deleteBranch(id){
   S.branches=S.branches.filter(b=>b.id!==id);
   for(const k of [...S.entries.keys()]) if(k.startsWith(id+'_')) S.entries.delete(k);
 }
+let reportCollections=new Set();
 function subscribeYear(){
+  reportCollections=new Set();
   unsubYear.forEach(u=>u());unsubYear=[];
-  if(!db){S.yearLoaded=true;return}
+  if(!db){S.yearLoaded=true;reportCollections=new Set(['entries','months','expenses']);return}
   S.yearLoaded=false;S.entries=new Map();S.months=new Map();S.expenses=new Map();expDraft=null;
   const q=col=>fs.query(fs.collection(db,base(),col),fs.where('year','==',S.year));
-  unsubYear.push(fs.onSnapshot(q('entries'),s=>{S.entries=new Map(s.docs.map(d=>[d.id,d.data()]));S.yearLoaded=true;render()},e=>toast(errMsg(e),true)));
-  unsubYear.push(fs.onSnapshot(q('months'),s=>{S.months=new Map(s.docs.map(d=>[d.id,d.data()]));render()},()=>{}));
-  unsubYear.push(fs.onSnapshot(q('expenses'),s=>{S.expenses=new Map(s.docs.map(d=>[d.id,d.data()]));render()},()=>{}));
+  unsubYear.push(fs.onSnapshot(q('entries'),s=>{S.entries=new Map(s.docs.map(d=>[d.id,d.data()]));S.yearLoaded=true;reportCollections.add('entries');render()},e=>toast(errMsg(e),true)));
+  unsubYear.push(fs.onSnapshot(q('months'),s=>{S.months=new Map(s.docs.map(d=>[d.id,d.data()]));reportCollections.add('months');render()},()=>{}));
+  unsubYear.push(fs.onSnapshot(q('expenses'),s=>{S.expenses=new Map(s.docs.map(d=>[d.id,d.data()]));reportCollections.add('expenses');render()},()=>{}));
 }
 function step(dm){
   let y=S.year,m=S.month+dm;if(m<0){m=11;y--}if(m>11){m=0;y++}
@@ -608,27 +611,37 @@ document.addEventListener('click',e=>{
   const a=t.dataset.act;
   if(a==='edit') openEdit();
   if(a==='ai') openAI();
-  if(a==='csv') exportCsv();
+  if(a==='word') exportWord(t);
   if(a==='logout') doLogout?.();
 });
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeOverlay();closeAI()}});
 
-function exportCsv(){
-  const bm=compute(),q=v=>`"${String(v).replace(/"/g,'""')}"`,rows=[[`مجموع سنة ${S.year} (ريال سعودي)`],['الفرع',...AR_MONTHS,'المجموع']];
-  S.branches.forEach(b=>{const r=bm[b.id].map(cellTotal);rows.push([b.name,...r,r.reduce((a,c)=>a+c,0)])});
-  const mt=AR_MONTHS.map((_,i)=>monthAll(bm,i));rows.push(['كل الفروع',...mt,mt.reduce((a,c)=>a+c,0)]);
-  rows.push([]);rows.push(['المصاريف (بيان المخروج)']);rows.push(['الفرع',...AR_MONTHS,'المجموع']);
-  S.branches.forEach(b=>{const r=AR_MONTHS.map((_,i)=>expTotal(expOf(b.id,S.year,i)));rows.push([b.name,...r,r.reduce((a,c)=>a+c,0)])});
-  rows.push([]);rows.push(['الصافي (الدخل − المصاريف)']);rows.push(['الفرع',...AR_MONTHS,'المجموع']);
-  S.branches.forEach(b=>{const r=bm[b.id].map((c,i)=>cellTotal(c)-expTotal(expOf(b.id,S.year,i)));rows.push([b.name,...r,r.reduce((a,c)=>a+c,0)])});
-  rows.push([]);rows.push([`مصاريف ${AR_MONTHS[S.month]} ${S.year}`]);
-  S.branches.forEach(b=>{for(const it of expOf(b.id,S.year,S.month)?.items||[]) rows.push([b.name,it.name,it.amount??''])});
-  rows.push([]);rows.push([`الدخل اليومي لشهر ${AR_MONTHS[S.month]} ${S.year}`]);rows.push(['التاريخ','اليوم',...S.branches.map(b=>b.name)]);
-  for(let d=1;d<=dim(S.year,S.month);d++){const k=ds(S.year,S.month,d);
-    rows.push([k,DOW[new Date(S.year,S.month,d).getDay()],...S.branches.map(b=>entryOf(b.id,k)?.amount??'')])}
-  const blob=new Blob(['﻿'+rows.map(r=>r.map(q).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`دفتر-الفروع-${S.year}.csv`;
-  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+function wordButton(){return `<button class="word-export" type="button" data-act="word">تنزيل تقرير الشهر بصيغة Word</button>`}
+let exportingWord=false;
+async function exportWord(button){
+  if(exportingWord) return;
+  if(!S.yearLoaded||reportCollections.size!==3){toast('انتظر اكتمال تحميل بيانات السنة',true);return}
+  exportingWord=true;button.disabled=true;
+  try{
+    // Capture the selected period and current inputs before awaiting the document builder.
+    const year=S.year,month=+$('reportMonth')?.value;
+    const selected=Number.isInteger(month)&&month>=0&&month<12?month:S.month;
+    const entries=[...S.entries.values()].map(e=>({...e}));
+    for(const id of pending.keys()){
+      const inp=$(id),amount=inp?parseAmount(inp.value):NaN;
+      if(Number.isNaN(amount)) throw new Error('يوجد مبلغ غير صالح. صحّحه قبل تنزيل التقرير.');
+      const date=inp.dataset.date,index=entries.findIndex(e=>e.branchId===S.branchId&&e.date===date);
+      if(index>=0) entries.splice(index,1);
+      if(amount!==null) entries.push({branchId:S.branchId,date,amount});
+    }
+    const expenses=[...S.expenses.values()].map(e=>({...e,items:e.items.map(i=>({...i}))}));
+    if(expDraft){const d=expDraft,key=ym(d.y,d.m),i=expenses.findIndex(e=>e.branchId===d.bid&&e.month===key);if(i>=0)expenses.splice(i,1);expenses.push({branchId:d.bid,month:key,items:d.items.map(i=>({...i}))})}
+    const branches=S.view==='branch'?S.branches.filter(b=>b.id===S.branchId):S.branches;
+    const blob=await buildMonthlyReport({year,month:selected,branches:branches.map(b=>({...b})),entries,totals:[...S.months.values()],expenses});
+    const a=document.createElement('a'),url=URL.createObjectURL(blob);a.href=url;a.download=`دفتر-${year}-${pad(selected+1)}.docx`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+    toast('تم تجهيز تقرير Word');
+  }catch(e){console.error(e);toast(e.message||'تعذّر إنشاء تقرير Word، حاول مرة أخرى',true)}
+  finally{exportingWord=false;button.disabled=false}
 }
 
 /* ---------- one-time import from a link (keeps figures out of the public code) ---------- */
