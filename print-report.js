@@ -14,17 +14,22 @@ export function reportMarkup(input){
   return `<section class="report-sheet report-branch"><header><span>${esc(title)}</span><h1>${esc(b.name)}</h1></header>${table(['المدخلات','المخرجات','الصافي'],[[money(b.income),money(b.out),money(b.net)]])}<h2>المخرجات: تفاصيل المصروفات</h2>${expenses}<h2>المدخلات: الدخل اليومي</h2>${daily}</section>`;
  }).join('');
 }
-let lastFocus,oldTitle;
 export function openPrintReport(input){
  if(document.getElementById('monthlyPrintReport'))return;
- lastFocus=document.activeElement;oldTitle=document.title;
+ const lastFocus=document.activeElement,oldTitle=document.title;
  const root=document.createElement('div');root.id='monthlyPrintReport';root.dir='rtl';root.setAttribute('role','dialog');root.setAttribute('aria-modal','true');root.setAttribute('aria-label','معاينة وطباعة تقرير الشهر');
- root.innerHTML=`<div class="report-toolbar"><button type="button" data-print-now>طباعة التقرير</button><button type="button" data-print-close>رجوع إلى دفتر</button><span>اختر الطابعة أو احفظ التقرير بصيغة PDF من نافذة الطباعة.</span></div><main>${reportMarkup(input)}</main>`;
+ root.innerHTML=`<div class="report-toolbar"><button type="button" data-print-now>طباعة التقرير</button><button type="button" data-print-close>رجوع إلى دفتر</button></div><main tabindex="-1"><p class="report-help">اختر الطابعة أو احفظ التقرير بصيغة PDF من نافذة الطباعة.</p>${reportMarkup(input)}</main>`;
  document.body.append(root);document.body.classList.add('report-open');
  for(const child of document.body.children)if(child!==root&&!child.inert){child.inert=true;child.dataset.reportInert='1'}
+ const historyKey='report-'+Date.now();
+ history.pushState({...history.state,daftarReport:historyKey},'');
  document.title=`دفتر: ${months[input.month]} ${input.year}`;
- const close=()=>{root.remove();document.body.classList.remove('report-open');document.title=oldTitle;document.querySelectorAll('[data-report-inert]').forEach(el=>{el.inert=false;delete el.dataset.reportInert});document.removeEventListener('keydown',keydown);lastFocus?.focus()};
+ let closed=false;
+ const cleanup=()=>{if(closed)return;closed=true;window.removeEventListener('popstate',onBack);root.remove();document.body.classList.remove('report-open');document.title=oldTitle;document.querySelectorAll('[data-report-inert]').forEach(el=>{el.inert=false;delete el.dataset.reportInert});document.removeEventListener('keydown',keydown);lastFocus?.focus({preventScroll:true})};
+ const onBack=()=>cleanup();
+ const close=()=>{cleanup();if(history.state?.daftarReport===historyKey)history.back()};
+ window.addEventListener('popstate',onBack);
  const keydown=e=>{if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();close()}if(e.key==='Tab'){const buttons=root.querySelectorAll('button');if(e.shiftKey&&document.activeElement===buttons[0]){e.preventDefault();buttons[1].focus()}else if(!e.shiftKey&&document.activeElement===buttons[1]){e.preventDefault();buttons[0].focus()}}};
  root.querySelector('[data-print-now]').onclick=()=>window.print();root.querySelector('[data-print-close]').onclick=close;
- document.addEventListener('keydown',keydown);root.querySelector('button').focus();
+ document.addEventListener('keydown',keydown);root.querySelector('[data-print-close]').focus({preventScroll:true});
 }
